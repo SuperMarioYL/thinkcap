@@ -1,0 +1,59 @@
+# build scratch
+PUBLISH_BLOCKED.md
+BUILD_SETUP_NEXT_STEPS.md
+.spawn.*
+.builder_*
+.build_metadata*
+_build_ctx.json
+.stage_*
+DRIFT_REPORT.md
+
+# editor / os
+.claude/
+CLAUDE.md
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+pip-log.txt
+pip-delete-this-directory.txt
+
+# venv
+venv/
+.venv/
+env/
+.env
+
+# testing
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.mypy_cache/
+.ruff_cache/
+
+# type checking
+.mypy_cache/

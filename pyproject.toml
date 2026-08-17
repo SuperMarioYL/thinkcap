@@ -1,0 +1,59 @@
+[build-system]
+requires = ["hatchling>=1.21"]
+build-backend = "hatchling.build"
+
+[project]
+name = "thinkcap"
+version = "0.1.0"
+description = "Per-task reasoning-budget governor for Qwen3.8 coding agents — profile the think trace, govern the budget mid-stream."
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.10"
+authors = [{ name = "SuperMarioYL" }]
+keywords = [
+  "llama-cpp",
+  "qwen",
+  "reasoning",
+  "agent",
+  "coding-agent",
+  "inference",
+  "budget",
+]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Environment :: Console",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Software Development :: Libraries",
+]
+dependencies = [
+  "fastapi>=0.115",
+  "httpx>=0.27",
+  "typer>=0.12",
+  "rich>=13.7",
+  "pyyaml>=6.0",
+  "uvicorn>=0.30",
+]
+
+[project.scripts]
+thinkcap = "thinkcap.cli:app"
+
+[project.urls]
+Homepage = "https://github.com/SuperMarioYL/thinkcap"
+Repository = "https://github.com/SuperMarioYL/thinkcap"
+Issues = "https://github.com/SuperMarioYL/thinkcap/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["thinkcap"]
+
+[tool.hatch.build.targets.sdist]
+include = ["thinkcap", "tests", "demos", "docs", "assets", "examples", "README.md", "README.en.md", "LICENSE", "VERSION"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra -q"
