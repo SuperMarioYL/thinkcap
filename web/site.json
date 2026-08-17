@@ -1,0 +1,92 @@
+{
+  "schema": 1,
+  "name": "thinkcap",
+  "github": "https://github.com/SuperMarioYL/thinkcap",
+  "host": "thinkcap.lei6393.com",
+  "lang": { "primary": "zh", "toggle": true },
+  "accent": ["#e6a144"],
+  "hero": {
+    "eyebrow": {
+      "zh": "按任务 · 测得清 · 看得见",
+      "en": "Per-task · Measured · Visible"
+    },
+    "headline": {
+      "zh": "按任务量出编码 agent 过度思考烧掉的 token",
+      "en": "Measure the tokens your coding agent burns overthinking — per task"
+    },
+    "sub": {
+      "zh": "thinkcap 跑五项固定任务，逐类记下 Qwen3.8 每条响应烧了多少 reasoning token，写成一张按任务预算表；再以一个即插即用的代理站在编码 agent 前面，告诉你它本该在哪一类活上被收敛。",
+      "en": "thinkcap runs five fixed tasks, records how many reasoning tokens Qwen3.8 burns per response for each class, and writes a per-task budget table — then stands as a drop-in proxy in front of your coding agent and tells you where it would have reined each class in."
+    },
+    "command": "thinkcap probe --server http://localhost:8080 --suite coding-mini"
+  },
+  "advantages": [
+    {
+      "title": {
+        "zh": "按任务量出烧掉的 reasoning token",
+        "en": "Measure reasoning-token burn — per task class"
+      },
+      "body": {
+        "zh": "跑五项固定任务，逐类记下每条流式响应里烧在思考上的 reasoning token，打出一张按任务类的分布表——rename 多少、refactor 多少，一目了然。",
+        "en": "Run five fixed tasks, record how many reasoning tokens each class burns on thinking per streamed response, and print a per-task-class distribution table — how much for a rename, how much for a refactor, all in plain view."
+      },
+      "chips": [
+        "› 覆盖 rename / bugfix / refactor / new_file / default",
+        "› 服务器不支持时退化为估算，标 approx",
+        "› 写出按任务预算表"
+      ]
+    },
+    {
+      "title": {
+        "zh": "一份按任务的预算，可读可改",
+        "en": "A per-task budget you can read and edit"
+      },
+      "body": {
+        "zh": "每一类活观察到的 token 分布，都被写成一条按任务的预算——预算值、来源、收敛时该注入什么，都在里面，纯文本、可 diff。",
+        "en": "Each class's observed token distribution becomes one per-task budget entry — the budget value, its source, and what to inject when reining it in, all in one plain-text file you can diff."
+      },
+      "chips": [
+        "› 每类一条预算，按观测或手动设",
+        "› 纯文本，可 diff、可 review",
+        "› 重跑同类自动扩宽分布"
+      ]
+    },
+    {
+      "title": {
+        "zh": "代理站在前面，告诉你它会在哪收敛",
+        "en": "A proxy in front that tells you where it would rein in"
+      },
+      "body": {
+        "zh": "把编码 agent 的请求地址改到 :8088，thinkcap 就以一个即插即用的流式代理站在它前面——它在每一条实时思考轨迹上对照本类预算，超过时在日志里写下本该在第 N 个 token 收敛，先观察、不动手。",
+        "en": "Repoint your coding agent to :8088 and thinkcap stands as a drop-in streaming proxy in front of it — it checks each live thinking trace against the per-class budget and, when crossed, logs that it would rein in at N tokens, observing first, never touching the stream."
+      },
+      "chips": [
+        "› v0.1 默认观察模式，绝不改流",
+        "› 一个 curl 看连接、生效类、是否在收敛",
+        "› 兼容 Cline / Aider / continue.dev"
+      ]
+    },
+    {
+      "title": {
+        "zh": "没有服务器也能跑",
+        "en": "Runs without a server"
+      },
+      "body": {
+        "zh": "用内置的预设响应跑完整流水线，不需要活的推理服务——先看机制、再对着你本地的 Qwen3.8 跑真实数字。",
+        "en": "Run the full pipeline against built-in preset responses — no live inference server needed — see the mechanism first, then run real numbers against your own local Qwen3.8."
+      },
+      "chips": [
+        "› --mock 一键跑完整流水线",
+        "› CI 与演示都能用",
+        "› 真实前后对比对着你自己的服务器跑"
+      ]
+    }
+  ],
+  "scene": { "kind": "particle-field" },
+  "footer": {
+    "tag": {
+      "zh": "按任务量出 Qwen3.8 编码 agent 烧掉的 reasoning token——MIT，开源。",
+      "en": "Per-task measurement of your Qwen3.8 coding agent's reasoning tokens — MIT, open source."
+    }
+  }
+}
