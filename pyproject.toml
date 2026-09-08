@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "thinkcap"
 version = "0.1.0"
-description = "Per-task reasoning-budget governor for Qwen3.8 coding agents — profile the think trace, govern the budget mid-stream."
+description = "Profile marked reasoning text by task class, write estimated budget policies, and observe threshold crossings through a streaming proxy."
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.10"

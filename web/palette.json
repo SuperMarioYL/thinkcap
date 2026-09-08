@@ -1,0 +1,38 @@
+{
+  "mode": "auto",
+  "id": "e6c956-bde76a-f6ccac-2f627a37f61f",
+  "identity": "https://github.com/supermarioyl/thinkcap",
+  "primary": "#e6c956",
+  "secondary": "#bde76a",
+  "highlight": "#f6ccac",
+  "dark": {
+    "bg": "#0a0b0d",
+    "panel": "#131517",
+    "code": "#141513",
+    "ink": "#fdf5ee",
+    "muted": "#b2b3a8",
+    "line": "#3a351d",
+    "primary": "#e6c956",
+    "secondary": "#bde76a",
+    "highlight": "#f6ccac",
+    "accent": "#e6c956",
+    "buttonStart": "#867632",
+    "buttonEnd": "#677e3a",
+    "buttonText": "#ffffff"
+  },
+  "light": {
+    "bg": "#fefdf9",
+    "panel": "#fefcf7",
+    "code": "#fdfbf3",
+    "ink": "#27261c",
+    "muted": "#72756b",
+    "line": "#f7eecb",
+    "primary": "#847331",
+    "secondary": "#657c39",
+    "highlight": "#86705e",
+    "accent": "#847331",
+    "buttonStart": "#867632",
+    "buttonEnd": "#677e3a",
+    "buttonText": "#ffffff"
+  }
+}

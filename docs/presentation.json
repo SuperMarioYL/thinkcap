@@ -1,0 +1,82 @@
+{
+  "name": "thinkcap",
+  "tagline": "Inspect reasoning budgets before changing a live stream.",
+  "architecture": {
+    "title": "Inside thinkcap",
+    "nodes": [
+      {
+        "title": "Task profiling",
+        "detail": "thinkcap/profiler.py"
+      },
+      {
+        "title": "Policy + observations",
+        "detail": "policy.py; budget_store.py"
+      },
+      {
+        "title": "Incremental parser",
+        "detail": "trace_parser.py"
+      },
+      {
+        "title": "Advisory SSE proxy",
+        "detail": "thinkcap/proxy.py"
+      }
+    ],
+    "edges": [
+      [
+        0,
+        1
+      ],
+      [
+        1,
+        2
+      ],
+      [
+        2,
+        3
+      ]
+    ]
+  },
+  "process": {
+    "title": "From input to a useful result",
+    "steps": [
+      {
+        "title": "Profile canned traces",
+        "detail": "Five policy classes"
+      },
+      {
+        "title": "Feed split delimiter",
+        "detail": "80 synthetic think bytes"
+      },
+      {
+        "title": "Evaluate threshold",
+        "detail": "True inside, false after close"
+      }
+    ],
+    "result": "Mock profiling emits five policy classes; a synthetic open think block crosses the budget and the closed block does not trigger."
+  },
+  "integrations": {
+    "title": "Supported input and output routes",
+    "items": [
+      {
+        "title": "Marked content deltas",
+        "detail": "im_start think / im_end"
+      },
+      {
+        "title": "llama.cpp HTTP",
+        "detail": "Probe and streaming upstream"
+      },
+      {
+        "title": "policy.json",
+        "detail": "Per-class budget rows"
+      },
+      {
+        "title": "budgets.json",
+        "detail": "Recorded observations"
+      },
+      {
+        "title": "FastAPI health",
+        "detail": "Configured upstream and classes"
+      }
+    ]
+  }
+}

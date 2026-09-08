@@ -1,0 +1,13 @@
+{
+  "schema": 1,
+  "source_revision": "3bf89632f402fe3dc6d6020ed13330db547a59f4",
+  "scope": "Offline mock profiling plus real incremental delimiter parsing and budget-decision logic. No live model or stream modification is exercised.",
+  "steps": [
+    {
+      "label": "Recorded run",
+      "body": "Offline mock profiling plus real incremental delimiter parsing and budget-decision logic. No live model or stream modification is exercised.",
+      "command": ".venv/bin/python examples/presentation_demo.py",
+      "output": "mock policy classes: bugfix, new_file, refactor, rename, default\ninside think: True\nestimated threshold reached: True\nafter closing block: False\ncompleted think blocks: 1"
+    }
+  ]
+}
