@@ -4,7 +4,9 @@ Set Shell "bash"
 Set Theme "Dracula"
 Set FontSize 13
 Set Width 100
-Set Height 36
+# vhs requires the window to be at least 40x40; 36 rendered nothing and
+# the demo workflow has been red since the v0.1.0 tag because of it.
+Set Height 42
 Set Padding 20
 
 # v0.1 ships the profiler (thinkcap probe) and the dry-run proxy surface
