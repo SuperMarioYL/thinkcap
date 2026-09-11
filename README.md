@@ -95,7 +95,7 @@ thinkcap serve --upstream http://localhost:8080 --port 8088 --policy policy.json
 
 ## 配置
 
-任务类包括 rename、bugfix、refactor、new_file、default。probe 提供 --server（或 THINKCAP_SERVER）、--model、--suite、--policy、--budgets；serve 使用 --upstream（或 THINKCAP_UPSTREAM）、--port、--policy。default 回退预算为 2048 token。代理强制流式，绑定 0.0.0.0 且无认证层，应部署于适当受控网络；/health 只报告配置，不验证上游就绪。
+任务类包括 rename、bugfix、refactor、new_file、default。probe 提供 --server（或 THINKCAP_SERVER）、--model、--suite、--policy、--budgets、--profile；serve 使用 --upstream（或 THINKCAP_UPSTREAM）、--port、--policy、--profile。default 回退预算为 2048 token。--profile 选择 trace pack（模型分隔符表面）：qwen3.8（默认，`<|im_start|>think`/`<|im_end|>`）、deepseek-r1 与 glm-4.6-z1（均为 `<think>`/`</think>`）；同一 budgets.json 中不同 pack 的观测分布互不混合。代理强制流式，绑定 0.0.0.0 且无认证层，应部署于适当受控网络；/health 只报告配置，不验证上游就绪。
 
 ## 集成与职责分工
 
@@ -120,7 +120,7 @@ thinkcap serve --upstream http://localhost:8080 --port 8088 --policy policy.json
 
 - 当前代理不会注入 token、抑制推理或停止上游计算。--accept 只改变日志/状态，不是强制预算模式。
 - 实时决策按字节除以四估算 token，离线回退按字符估算。两者均为估计，五任务 mock 观测不是标定后的模型预算。
-- 解析器要求 content 中出现字面 <|im_start|>think 与 <|im_end|>；其他推理字段或模板需要独立支持。示例未验证当前 Qwen 部署。
+- 解析器按 --profile 指定的 trace pack 在 content 中匹配字面分隔符（qwen3.8：`<|im_start|>think`/`<|im_end|>`；deepseek-r1、glm-4.6-z1：`<think>`/`</think>`）；其余推理字段或模板需要独立支持。示例未验证当前 Qwen 部署。
 
 真实上游预算控制与通过率一致性研究仍是后续工作；当前交付能力是 profiling 与提示型观测。
 

@@ -27,7 +27,13 @@ import json
 import logging
 from typing import AsyncIterator, List, Optional
 
-from .config import DEFAULT_INCEPTION_TOKEN, DEFAULT_PORT, DEFAULT_UPSTREAM, TaskClass
+from .config import (
+    DEFAULT_PORT,
+    DEFAULT_TRACE_PACK,
+    DEFAULT_UPSTREAM,
+    TaskClass,
+    TracePack,
+)
 from .policy import BudgetPolicy, policy_index, load_policy, should_inject
 from .trace_parser import LiveTraceState, ThinkStreamParser
 
@@ -65,6 +71,7 @@ def create_app(
     *,
     enforce: bool = False,
     dry_run: bool = True,
+    trace_pack: Optional[TracePack] = None,
 ):
     """Build the FastAPI app.
 
@@ -72,6 +79,10 @@ def create_app(
     the proxy will *log* "would inject at N tokens" but never mutate the
     stream. Flipping ``enforce=True`` (m3's ``--accept``) is what turns the
     advisory into a governor — and that flip is gated on the parity suite.
+
+    ``trace_pack`` selects the delimiter surface the upstream model emits
+    (default: Qwen3.8); the live parser and the policy's inception token
+    must match the model behind the upstream server.
     """
     # Local imports: fastapi/httpx are hard deps but keeping them local lets
     # the pure modules (trace_parser, policy) import without them, which is
@@ -80,6 +91,7 @@ def create_app(
     from fastapi.responses import StreamingResponse
     import httpx
 
+    pack = trace_pack or DEFAULT_TRACE_PACK
     policies: List[BudgetPolicy] = []
     if policy_path:
         try:
@@ -104,6 +116,7 @@ def create_app(
     app.state.upstream = upstream.rstrip("/")
     app.state.by_class = by_class
     app.state.enforce = enforce or (not dry_run)
+    app.state.trace_pack = pack
 
     @app.get("/health")
     async def health() -> dict:
@@ -111,6 +124,7 @@ def create_app(
             "status": "ok",
             "upstream": app.state.upstream,
             "enforce": app.state.enforce,
+            "trace_pack": app.state.trace_pack.name,
             "classes": [c.value for c in app.state.by_class],
         }
 
@@ -128,7 +142,10 @@ def create_app(
         body_for_upstream["stream"] = True
 
         async def generate() -> AsyncIterator[bytes]:
-            parser = ThinkStreamParser()
+            parser = ThinkStreamParser(
+                think_start=app.state.trace_pack.think_start,
+                think_end=app.state.trace_pack.think_end,
+            )
             state = LiveTraceState(budget=policy.budget_tokens if policy else 0)
             async with httpx.AsyncClient(timeout=None) as client:
                 async with client.stream(
@@ -218,6 +235,7 @@ def run(
     *,
     enforce: bool = False,
     dry_run: bool = True,
+    trace_pack: Optional[TracePack] = None,
 ) -> None:
     """Start the uvicorn server (called by the ``serve`` CLI command)."""
     import uvicorn
@@ -227,11 +245,13 @@ def run(
         policy_path=policy_path,
         enforce=enforce,
         dry_run=dry_run,
+        trace_pack=trace_pack,
     )
     log.info(
-        "thinkcap serve on :%d -> %s (enforce=%s)",
+        "thinkcap serve on :%d -> %s (enforce=%s, trace_pack=%s)",
         port,
         upstream,
         app.state.enforce,
+        app.state.trace_pack.name,
     )
     uvicorn.run(app, host="0.0.0.0", port=port, log_level="info")

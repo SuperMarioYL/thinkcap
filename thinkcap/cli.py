@@ -25,10 +25,13 @@ from .config import (
     DEFAULT_MODEL,
     DEFAULT_POLICY_PATH,
     DEFAULT_PORT,
+    DEFAULT_TRACE_PACK,
     DEFAULT_UPSTREAM,
     VERSION,
     available_suite_names,
+    available_trace_pack_names,
     get_suite,
+    get_trace_pack,
 )
 
 app = typer.Typer(
@@ -83,12 +86,24 @@ def probe(
         help="Run against the built-in canned responses (no server needed). "
         "Used by the demo and CI.",
     ),
+    profile: str = typer.Option(
+        DEFAULT_TRACE_PACK.name,
+        "--profile",
+        help="Trace pack (model delimiter surface) to parse with. "
+        f"Available: {', '.join(available_trace_pack_names())}.",
+    ),
 ) -> None:
     """Run a task suite and profile per-class reasoning tokens."""
     from .profiler import probe as run_probe, render_table
 
     try:
         suite_obj = get_suite(suite)
+    except KeyError as exc:
+        console.print(f"[red]error:[/red] {exc}")
+        raise typer.Exit(code=2)
+
+    try:
+        trace_pack = get_trace_pack(profile)
     except KeyError as exc:
         console.print(f"[red]error:[/red] {exc}")
         raise typer.Exit(code=2)
@@ -118,6 +133,7 @@ def probe(
             model=model,
             policy_path=str(policy_out),
             budget_store_path=str(budgets_out),
+            trace_pack=trace_pack,
         )
     except httpx.HTTPError as exc:
         # Unreachable server, refused connection, upstream 5xx: surface a
@@ -160,6 +176,12 @@ def serve(
         help="v0.1 default: log 'would inject' but never mutate the stream. "
         "--accept flips to enforcing (gated on the m3 parity suite).",
     ),
+    profile: str = typer.Option(
+        DEFAULT_TRACE_PACK.name,
+        "--profile",
+        help="Trace pack (model delimiter surface) the upstream emits. "
+        f"Available: {', '.join(available_trace_pack_names())}.",
+    ),
 ) -> None:
     """Start the OpenAI-compatible streaming proxy (m2 surface).
 
@@ -169,6 +191,12 @@ def serve(
     """
     from . import proxy as proxy_mod
     from .policy import load_policy
+
+    try:
+        trace_pack = get_trace_pack(profile)
+    except KeyError as exc:
+        console.print(f"[red]error:[/red] {exc}")
+        raise typer.Exit(code=2)
 
     if not Path(policy).exists():
         console.print(
@@ -195,6 +223,7 @@ def serve(
         policy_path=str(policy) if policy else None,
         dry_run=dry_run,
         enforce=not dry_run,
+        trace_pack=trace_pack,
     )
 
 

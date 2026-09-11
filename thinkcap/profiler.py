@@ -25,10 +25,12 @@ from .config import (
     DEFAULT_BUDGET_STORE_PATH,
     DEFAULT_MODEL,
     DEFAULT_POLICY_PATH,
+    DEFAULT_TRACE_PACK,
     DEFAULT_UPSTREAM,
     Suite,
     Task,
     TaskClass,
+    TracePack,
 )
 from .policy import (
     BudgetPolicy,
@@ -149,9 +151,17 @@ def profile_task(
     task: Task,
     response: str,
     tokenize_fn: TokenizeFn,
+    trace_pack: Optional[TracePack] = None,
 ) -> TaskResult:
-    """Parse one captured response into a :class:`TaskResult`."""
-    blocks = extract_think_blocks(response)
+    """Parse one captured response into a :class:`TaskResult`.
+
+    ``trace_pack`` selects the delimiter surface the response was emitted
+    with (default: Qwen3.8).
+    """
+    pack = trace_pack or DEFAULT_TRACE_PACK
+    blocks = extract_think_blocks(
+        response, think_start=pack.think_start, think_end=pack.think_end
+    )
     think_text = "\n".join(blocks)
     n_tokens, source = tokenize_fn(think_text)
     return TaskResult(
@@ -199,6 +209,7 @@ def probe(
     policy_path: str = str(DEFAULT_POLICY_PATH),
     budget_store_path: str = str(DEFAULT_BUDGET_STORE_PATH),
     write_artifacts: bool = True,
+    trace_pack: Optional[TracePack] = None,
 ) -> ProbeReport:
     """Run the suite end-to-end and (optionally) write ``policy.json``.
 
@@ -218,7 +229,12 @@ def probe(
         ``{task_id: full_response}`` map; when present, the HTTP round-trip
         is skipped and the canned response is profiled directly. This is how
         the suite is profiled in CI without a live model.
+    trace_pack
+        The delimiter surface of the model behind ``server`` (default
+        Qwen3.8). Selects how responses are parsed and which inception
+        token the learned policy carries.
     """
+    pack = trace_pack or DEFAULT_TRACE_PACK
     if tokenize_fn is None:
         tokenize_fn = make_tokenize_fn(client=client, server=server, prefer_api=True)
 
@@ -233,7 +249,7 @@ def probe(
                     "pass either client= or mock_responses="
                 )
             response = collect_response(client, server, task, model=model)
-        results.append(profile_task(task, response, tokenize_fn))
+        results.append(profile_task(task, response, tokenize_fn, trace_pack=pack))
 
     profiles = aggregate(results)
 
@@ -242,7 +258,9 @@ def probe(
         # then rebuild the profiles (and the policy built from them) from
         # the store so re-probing a class WIDENS its distribution — the
         # documented --budgets contract — instead of silently replacing
-        # it with the latest run.
+        # it with the latest run. Aggregation filters by the pack so a
+        # budgets.json reused across models keeps one distribution per
+        # model surface.
         store = BudgetStore(budget_store_path)
         store.load()
         for r in results:
@@ -251,11 +269,14 @@ def probe(
                 r.reasoning_tokens,
                 outcome="observed",
                 token_source=r.token_source,
+                trace_pack=pack.name,
             )
         store.save()
-        profiles = store.profiles()
+        profiles = store.profiles(trace_pack=pack.name)
 
-    policy = build_policy(profiles)
+    # The policy's inception token must close a think block of the pack the
+    # responses were emitted with (e.g. ``</think>`` for deepseek-r1).
+    policy = build_policy(profiles, inception_token=pack.inception_token)
 
     report = ProbeReport(
         suite_name=suite.name,

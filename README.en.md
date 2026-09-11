@@ -95,7 +95,7 @@ thinkcap serve --upstream http://localhost:8080 --port 8088 --policy policy.json
 
 ## Configuration
 
-Task classes are rename, bugfix, refactor, new_file and default. Probe uses --server (or THINKCAP_SERVER), --model, --suite, --policy and --budgets; serve uses --upstream (or THINKCAP_UPSTREAM), --port and --policy. The default class falls back to 2048 tokens. The proxy forces streaming and binds 0.0.0.0 without an authentication layer, so deploy only in a suitably controlled network. /health reports configuration, not upstream readiness.
+Task classes are rename, bugfix, refactor, new_file and default. Probe uses --server (or THINKCAP_SERVER), --model, --suite, --policy, --budgets and --profile; serve uses --upstream (or THINKCAP_UPSTREAM), --port, --policy and --profile. The default class falls back to 2048 tokens. --profile selects the trace pack (model delimiter surface): qwen3.8 (default, `<|im_start|>think`/`<|im_end|>`), deepseek-r1 and glm-4.6-z1 (both `<think>`/`</think>`); observations recorded in one budgets.json keep separate distributions per pack. The proxy forces streaming and binds 0.0.0.0 without an authentication layer, so deploy only in a suitably controlled network. /health reports configuration, not upstream readiness.
 
 ## Integrations and responsibilities
 
@@ -120,7 +120,7 @@ Choose the input and output route that matches your workflow. The local example 
 
 - The current proxy does not inject tokens, suppress reasoning or stop upstream computation. --accept changes logging/state only and is not an enforcement mode.
 - Live token decisions use bytes divided by four; offline fallback counts characters. These are estimates, and a five-task mock profile is not a calibrated model budget.
-- The parser expects literal <|im_start|>think and <|im_end|> inside content. Other reasoning fields or templates need separate support. The demo tests no current Qwen deployment.
+- The parser matches literal delimiters in content according to the --profile trace pack (qwen3.8: `<|im_start|>think`/`<|im_end|>`; deepseek-r1 and glm-4.6-z1: `<think>`/`</think>`). Other reasoning fields or templates need separate support. The demo tests no current Qwen deployment.
 
 Actual upstream budget control and a pass-rate parity study are future work. The shipped path supports profiling and advisory observation.
 

@@ -62,6 +62,81 @@ DEFAULT_INCEPTION_TOKEN = (
 )
 
 
+# --- Trace packs (per-model delimiter profiles) -----------------------------
+
+
+@dataclass(frozen=True)
+class TracePack:
+    """The delimiter surface of one model family's reasoning trace.
+
+    The governance primitive (parse the live think trace, gate on a
+    per-task budget, inject an inception thought) is model-agnostic; only
+    the delimiters and the token that closes a think block differ. A pack
+    bundles those facts so ``probe`` and ``serve`` handle non-Qwen3.8
+    streams with the same parser.
+    """
+
+    name: str
+    label: str
+    think_start: str
+    think_end: str
+    inception_token: str
+
+
+#: Qwen3.8 — the v0.1.0 surface, byte-identical literals.
+TRACE_PACK_QWEN38 = TracePack(
+    name="qwen3.8",
+    label="Qwen3.8 (<|im_start|>think ... <|im_end|>)",
+    think_start=THINK_START,
+    think_end=THINK_END,
+    inception_token=DEFAULT_INCEPTION_TOKEN,
+)
+
+#: DeepSeek-R1 — reasoning arrives as a ``<think>`` ... ``</think>`` block
+#: inside the content stream.
+TRACE_PACK_DEEPSEEK_R1 = TracePack(
+    name="deepseek-r1",
+    label="DeepSeek-R1 (<think> ... </think>)",
+    think_start="<think>",
+    think_end="</think>",
+    inception_token=" ...I have reasoned enough for this task. Acting now.\n</think>",
+)
+
+#: GLM-4.6-Z1 — same primitive, GLM's chat-template delimiters.
+TRACE_PACK_GLM_46_Z1 = TracePack(
+    name="glm-4.6-z1",
+    label="GLM-4.6-Z1 (<think> ... </think>)",
+    think_start="<think>",
+    think_end="</think>",
+    inception_token=" ...I have reasoned enough for this task. Acting now.\n</think>",
+)
+
+#: Registry of shippable trace packs, keyed by name (the ``--profile`` flag).
+TRACE_PACKS: Dict[str, TracePack] = {
+    TRACE_PACK_QWEN38.name: TRACE_PACK_QWEN38,
+    TRACE_PACK_DEEPSEEK_R1.name: TRACE_PACK_DEEPSEEK_R1,
+    TRACE_PACK_GLM_46_Z1.name: TRACE_PACK_GLM_46_Z1,
+}
+
+#: The default pack — unchanged v0.1.0 behavior.
+DEFAULT_TRACE_PACK = TRACE_PACK_QWEN38
+
+
+def get_trace_pack(name: str) -> TracePack:
+    """Resolve a trace pack by name. Raises ``KeyError`` for unknown names."""
+    pack = TRACE_PACKS.get(name)
+    if pack is None:
+        raise KeyError(
+            f"unknown trace pack '{name}'; available: "
+            f"{', '.join(sorted(TRACE_PACKS))}"
+        )
+    return pack
+
+
+def available_trace_pack_names() -> List[str]:
+    return sorted(TRACE_PACKS)
+
+
 # --- Paths + defaults -------------------------------------------------------
 
 DEFAULT_POLICY_PATH = Path("policy.json")

@@ -65,11 +65,17 @@ def estimate_tokens_from_bytes(n_bytes: int) -> int:
     return max(1, n_bytes // 4)
 
 
-def extract_think_blocks(text: str) -> List[str]:
+def extract_think_blocks(
+    text: str,
+    think_start: str = THINK_START,
+    think_end: str = THINK_END,
+) -> List[str]:
     """Offline parse: return every think-block body in ``text``.
 
-    A think block runs from ``<|im_start|>think`` to the next ``<|im_end|>``.
-    An unterminated block (stream cut mid-think) yields its tail as the body,
+    A think block runs from ``think_start`` to the next ``think_end``
+    (Qwen3.8 defaults: ``<|im_start|>think`` ... ``<|im_end|>``; other
+    trace packs such as deepseek-r1 pass ``<think>`` / ``</think>``). An
+    unterminated block (stream cut mid-think) yields its tail as the body,
     so a partially-captured probe response is still profiled rather than
     dropped.
     """
@@ -77,16 +83,16 @@ def extract_think_blocks(text: str) -> List[str]:
     cursor = 0
     n = len(text)
     while cursor < n:
-        start = text.find(THINK_START, cursor)
+        start = text.find(think_start, cursor)
         if start == -1:
             break
-        body_start = start + len(THINK_START)
-        end = text.find(THINK_END, body_start)
+        body_start = start + len(think_start)
+        end = text.find(think_end, body_start)
         if end == -1:
             blocks.append(text[body_start:])
             break
         blocks.append(text[body_start:end])
-        cursor = end + len(THINK_END)
+        cursor = end + len(think_end)
     return blocks
 
 
@@ -128,7 +134,13 @@ class ThinkStreamParser:
     deltas) events, not O(text length).
     """
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        think_start: str = THINK_START,
+        think_end: str = THINK_END,
+    ) -> None:
+        self._think_start = think_start
+        self._think_end = think_end
         self._buf = ""
         self._in_think = False
         self._current_think = ""
@@ -136,9 +148,9 @@ class ThinkStreamParser:
         # ``_current_think`` / a closed ``think_blocks`` entry). The live
         # ``bytes_seen`` counter additionally counts the held tail
         # tentatively (see the property below) so the governor gets a signal
-        # even before a split closer resolves — at the cost of a ≤9-byte
-        # over-count during the held-tail window, which the byte→token
-        # estimate tolerates.
+        # even before a split closer resolves — at the cost of a
+        # ≤ len(think_end)-1 byte over-count during the held-tail window,
+        # which the byte→token estimate tolerates.
         self._confirmed_think_bytes = 0
         self.think_blocks: List[str] = []
 
@@ -153,7 +165,7 @@ class ThinkStreamParser:
         """Live think-bytes counter: confirmed + tentatively-held tail.
 
         While inside a think block, the parser holds up to
-        ``len(THINK_END) - 1`` bytes as a possible split closer; those bytes
+        ``len(think_end) - 1`` bytes as a possible split closer; those bytes
         are reported here *tentatively* (they will be retracted if they turn
         out to be a delimiter) so the governor can decide to inject *before*
         the block closes. Outside a think block only confirmed bytes count.
@@ -191,11 +203,11 @@ class ThinkStreamParser:
         # be a partial match we must hold for the next feed().
         while True:
             if not self._in_think:
-                idx = self._buf.find(THINK_START)
+                idx = self._buf.find(self._think_start)
                 if idx == -1:
                     # No opener in view. Emit the prefix that cannot be part
                     # of a (split) opener; keep the tail as a candidate.
-                    safe = len(self._buf) - (len(THINK_START) - 1)
+                    safe = len(self._buf) - (len(self._think_start) - 1)
                     if safe > 0:
                         out = self._buf[:safe]
                         self._buf = self._buf[safe:]
@@ -206,11 +218,11 @@ class ThinkStreamParser:
                 pre = self._buf[:idx]
                 if pre:
                     events.append(("action", pre))
-                self._buf = self._buf[idx + len(THINK_START):]
+                self._buf = self._buf[idx + len(self._think_start):]
                 self._in_think = True
                 # fall through: immediately try to drain think content
             # We are inside a think block: look for the closer.
-            idx = self._buf.find(THINK_END)
+            idx = self._buf.find(self._think_end)
             if idx == -1:
                 # No closer yet. Emit think text but hold a tail that could
                 # be a split closer. The held tail still counts toward the
@@ -218,7 +230,7 @@ class ThinkStreamParser:
                 # property) so the governor has a signal before the block
                 # closes; only the *emitted* prefix is locked into
                 # ``_confirmed_think_bytes`` here.
-                safe = len(self._buf) - (len(THINK_END) - 1)
+                safe = len(self._buf) - (len(self._think_end) - 1)
                 if safe > 0:
                     out = self._buf[:safe]
                     self._buf = self._buf[safe:]
@@ -235,7 +247,7 @@ class ThinkStreamParser:
                 events.append(("think", body))
             self.think_blocks.append(self._current_think)
             self._current_think = ""
-            self._buf = self._buf[idx + len(THINK_END):]
+            self._buf = self._buf[idx + len(self._think_end):]
             self._in_think = False
             # loop again: there may be more openers/closers in the remainder
 
@@ -273,9 +285,11 @@ class ThinkStreamParser:
 
 def parse_stream(
     chunks: List[str],
+    think_start: str = THINK_START,
+    think_end: str = THINK_END,
 ) -> Tuple[List[TraceEvent], LiveTraceState]:
     """Convenience: feed a list of deltas, return all events + final state."""
-    parser = ThinkStreamParser()
+    parser = ThinkStreamParser(think_start=think_start, think_end=think_end)
     events: List[TraceEvent] = []
     for ch in chunks:
         events.extend(parser.feed(ch))

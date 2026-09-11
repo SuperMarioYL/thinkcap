@@ -22,9 +22,11 @@ class OutcomeRecord:
     """One observed turn: class, tokens used, outcome tag, wall-clock.
 
     ``token_source`` records which counter produced the tokens
-    (``"tokenize_api"`` or ``"approx"``) so re-aggregated profiles keep
-    their provenance label across runs. Records written by v0.1.0 lack
-    the field and load back as ``"approx"``.
+    (``"tokenize_api"`` or ``"approx"``) and ``trace_pack`` which model
+    surface they were observed on, so re-aggregated profiles keep their
+    provenance across runs and distributions from different packs never
+    mix. Records written by v0.1.0 lack both fields and load back as
+    ``"approx"`` on the default (qwen3.8) pack.
     """
 
     task_class: TaskClass
@@ -32,6 +34,7 @@ class OutcomeRecord:
     outcome: str = "observed"
     ts: float = field(default_factory=time.time)
     token_source: str = "approx"
+    trace_pack: str = "qwen3.8"
 
     def to_dict(self) -> dict:
         return {
@@ -40,6 +43,7 @@ class OutcomeRecord:
             "outcome": self.outcome,
             "ts": self.ts,
             "token_source": self.token_source,
+            "trace_pack": self.trace_pack,
         }
 
     @classmethod
@@ -50,6 +54,7 @@ class OutcomeRecord:
             outcome=str(d.get("outcome", "observed")),
             ts=float(d.get("ts", 0.0)),
             token_source=str(d.get("token_source", "approx")),
+            trace_pack=str(d.get("trace_pack", "qwen3.8")),
         )
 
 
@@ -98,6 +103,7 @@ class BudgetStore:
         tokens: int,
         outcome: str = "observed",
         token_source: str = "approx",
+        trace_pack: str = "qwen3.8",
     ) -> OutcomeRecord:
         if not self._loaded:
             self.load()
@@ -106,6 +112,7 @@ class BudgetStore:
             tokens=int(tokens),
             outcome=outcome,
             token_source=token_source,
+            trace_pack=trace_pack,
         )
         self._records.append(rec)
         return rec
@@ -117,13 +124,22 @@ class BudgetStore:
 
     # -- aggregation --------------------------------------------------------
 
-    def profiles(self) -> List[ReasoningProfile]:
-        """Re-aggregate the log into per-class :class:`ReasoningProfile`."""
+    def profiles(
+        self, trace_pack: str | None = None
+    ) -> List[ReasoningProfile]:
+        """Re-aggregate the log into per-class :class:`ReasoningProfile`.
+
+        ``trace_pack`` restricts the aggregation to observations recorded on
+        that pack's surface, so budgets learned for one model are never
+        widened by another model's distribution.
+        """
         if not self._loaded:
             self.load()
         by_class: Dict[TaskClass, List[int]] = {}
         source_for: Dict[TaskClass, str] = {}
         for rec in self._records:
+            if trace_pack is not None and rec.trace_pack != trace_pack:
+                continue
             by_class.setdefault(rec.task_class, []).append(rec.tokens)
             # Same rule as profiler.aggregate: the class is labeled by the
             # most precise counter any of its observations used.
