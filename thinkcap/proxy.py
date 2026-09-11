@@ -84,8 +84,16 @@ def create_app(
     if policy_path:
         try:
             policies = load_policy(policy_path)
-        except FileNotFoundError:
-            log.warning("policy %s not found; running passthrough-only", policy_path)
+        except (FileNotFoundError, ValueError, OSError) as exc:
+            # ValueError covers json.JSONDecodeError and a malformed
+            # budgets shape; programmatic callers (tests, uvicorn
+            # factories) still get an app — the CLI fail-fasts earlier,
+            # this keeps create_app itself total.
+            log.warning(
+                "policy %s unusable (%s); running passthrough-only",
+                policy_path,
+                exc,
+            )
     by_class = policy_index(policies)
 
     app = FastAPI(

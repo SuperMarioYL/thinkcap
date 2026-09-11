@@ -168,6 +168,7 @@ def serve(
     pass-rate-parity suite — do not ship a governor that breaks agents.
     """
     from . import proxy as proxy_mod
+    from .policy import load_policy
 
     if not Path(policy).exists():
         console.print(
@@ -175,6 +176,18 @@ def serve(
             f"passthrough-only (run `thinkcap probe` first)."
         )
         policy = None  # type: ignore[assignment]
+    else:
+        # A policy the user explicitly passed that exists but cannot be
+        # parsed is a hard config error — exit before uvicorn starts
+        # instead of silently running an ungoverned proxy.
+        try:
+            load_policy(policy)
+        except (ValueError, OSError) as exc:
+            console.print(
+                f"[red]error:[/red] policy {policy} is not a valid "
+                f"policy.json: {exc}"
+            )
+            raise typer.Exit(code=2)
 
     proxy_mod.run(
         upstream=upstream,

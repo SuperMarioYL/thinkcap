@@ -63,3 +63,83 @@ def test_probe_unknown_suite_is_clean_error() -> None:
     assert result.exit_code == 2
     assert "unknown suite" in result.output
     assert "Traceback" not in result.output
+
+
+# --- serve: malformed policy must fail fast, not crash --------------------
+
+
+def test_serve_invalid_json_policy_is_clean_error(tmp_path) -> None:
+    # v0.1.0 crashed here: create_app only caught FileNotFoundError, so a
+    # truncated/hand-edited policy.json raised json.JSONDecodeError through
+    # cli.serve -> proxy.run -> create_app.
+    bad = tmp_path / "bad.json"
+    bad.write_text("{broken json", encoding="utf-8")
+    result = runner.invoke(app, ["serve", "--policy", str(bad), "--port", "9917"])
+    assert result.exit_code == 2
+    assert "error:" in result.output
+    assert "not a valid policy.json" in result.output
+    assert "Traceback" not in result.output
+
+
+def test_serve_wrong_shape_policy_is_clean_error(tmp_path) -> None:
+    # budgets must be a list; a string here raised ValueError at startup.
+    bad = tmp_path / "badshape.json"
+    bad.write_text('{"version": "0.1.0", "budgets": "NOT-A-LIST"}', encoding="utf-8")
+    result = runner.invoke(app, ["serve", "--policy", str(bad), "--port", "9918"])
+    assert result.exit_code == 2
+    assert "not a valid policy.json" in result.output
+    assert "Traceback" not in result.output
+
+
+def test_serve_missing_policy_warns_and_runs_passthrough(
+    tmp_path, monkeypatch
+) -> None:
+    # The documented first-run contract is unchanged: a missing file warns
+    # and serve continues passthrough-only (policy_path=None to the app).
+    import thinkcap.proxy as proxy_mod
+
+    calls = {}
+    monkeypatch.setattr(proxy_mod, "run", lambda **kw: calls.update(kw))
+    result = runner.invoke(
+        app,
+        ["serve", "--policy", str(tmp_path / "missing.json"), "--port", "9919"],
+    )
+    assert result.exit_code == 0
+    assert "warn" in result.output
+    assert "passthrough-only" in result.output
+    assert calls["policy_path"] is None
+
+
+def test_serve_valid_policy_reaches_proxy_run(tmp_path, monkeypatch) -> None:
+    import thinkcap.proxy as proxy_mod
+
+    calls = {}
+    monkeypatch.setattr(proxy_mod, "run", lambda **kw: calls.update(kw))
+    good = tmp_path / "good.json"
+    good.write_text(
+        '{"version": "0.1.0", "budgets": '
+        '[{"task_class": "default", "budget_tokens": 100}]}',
+        encoding="utf-8",
+    )
+    result = runner.invoke(app, ["serve", "--policy", str(good), "--port", "9920"])
+    assert result.exit_code == 0
+    assert "warn" not in result.output
+    assert calls["policy_path"] == str(good)
+
+
+def test_create_app_with_malformed_policy_degrades_to_passthrough(tmp_path) -> None:
+    # Programmatic contract: create_app always returns an app object; an
+    # unusable policy means passthrough-only (no classes, not enforcing).
+    from fastapi.testclient import TestClient
+
+    from thinkcap.proxy import create_app
+
+    bad = tmp_path / "bad.json"
+    bad.write_text("{broken json", encoding="utf-8")
+    app = create_app(policy_path=str(bad))
+    client = TestClient(app)
+    resp = client.get("/health")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["enforce"] is False
+    assert body["classes"] == []
