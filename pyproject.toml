@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "thinkcap"
-version = "0.1.0"
+version = "0.2.0"
 description = "Profile marked reasoning text by task class, write estimated budget policies, and observe threshold crossings through a streaming proxy."
 readme = "README.md"
 license = "MIT"
@@ -52,7 +52,7 @@ Issues = "https://github.com/SuperMarioYL/thinkcap/issues"
 packages = ["thinkcap"]
 
 [tool.hatch.build.targets.sdist]
-include = ["thinkcap", "tests", "demos", "docs", "assets", "examples", "README.md", "README.en.md", "LICENSE", "VERSION"]
+include = ["thinkcap", "tests", "demos", "docs", "assets", "examples", "README.md", "README.en.md", "CHANGELOG.md", "LICENSE", "VERSION"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

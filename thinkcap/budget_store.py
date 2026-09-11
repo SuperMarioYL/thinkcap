@@ -87,7 +87,7 @@ class BudgetStore:
     def save(self) -> Path:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         data = {
-            "version": "0.1.0",
+            "version": "0.2.0",
             "records": [r.to_dict() for r in self._records],
         }
         self.path.write_text(

@@ -139,7 +139,7 @@ def save_policy(
     """Write the policy as ``policy.json`` (the file the m2 proxy loads)."""
     out = Path(path)
     data = {
-        "version": "0.1.0",
+        "version": "0.2.0",
         "budgets": [p.to_dict() for p in policies],
     }
     out.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")

@@ -164,7 +164,7 @@ def test_policy_file_is_valid_json_with_budgets_key(tmp_path) -> None:
     path = tmp_path / "policy.json"
     save_policy(policies, path)
     data = json.loads(path.read_text(encoding="utf-8"))
-    assert data["version"] == "0.1.0"
+    assert data["version"] == "0.2.0"
     assert isinstance(data["budgets"], list)
     assert any(b["task_class"] == "rename" for b in data["budgets"])
 
