@@ -236,6 +236,25 @@ def probe(
         results.append(profile_task(task, response, tokenize_fn))
 
     profiles = aggregate(results)
+
+    if write_artifacts:
+        # The store owns the accumulated distribution: record this run,
+        # then rebuild the profiles (and the policy built from them) from
+        # the store so re-probing a class WIDENS its distribution — the
+        # documented --budgets contract — instead of silently replacing
+        # it with the latest run.
+        store = BudgetStore(budget_store_path)
+        store.load()
+        for r in results:
+            store.record(
+                r.task_class,
+                r.reasoning_tokens,
+                outcome="observed",
+                token_source=r.token_source,
+            )
+        store.save()
+        profiles = store.profiles()
+
     policy = build_policy(profiles)
 
     report = ProbeReport(
@@ -249,11 +268,6 @@ def probe(
     if write_artifacts:
         save_policy(policy, policy_path)
         report.policy_path = policy_path
-        store = BudgetStore(budget_store_path)
-        store.load()
-        for r in results:
-            store.record(r.task_class, r.reasoning_tokens, outcome="observed")
-        store.save()
         report.budget_store_path = budget_store_path
 
     return report

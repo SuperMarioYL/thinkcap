@@ -19,12 +19,19 @@ from .policy import ReasoningProfile
 
 @dataclass
 class OutcomeRecord:
-    """One observed turn: class, tokens used, outcome tag, wall-clock."""
+    """One observed turn: class, tokens used, outcome tag, wall-clock.
+
+    ``token_source`` records which counter produced the tokens
+    (``"tokenize_api"`` or ``"approx"``) so re-aggregated profiles keep
+    their provenance label across runs. Records written by v0.1.0 lack
+    the field and load back as ``"approx"``.
+    """
 
     task_class: TaskClass
     tokens: int
     outcome: str = "observed"
     ts: float = field(default_factory=time.time)
+    token_source: str = "approx"
 
     def to_dict(self) -> dict:
         return {
@@ -32,6 +39,7 @@ class OutcomeRecord:
             "tokens": int(self.tokens),
             "outcome": self.outcome,
             "ts": self.ts,
+            "token_source": self.token_source,
         }
 
     @classmethod
@@ -41,6 +49,7 @@ class OutcomeRecord:
             tokens=int(d.get("tokens", 0)),
             outcome=str(d.get("outcome", "observed")),
             ts=float(d.get("ts", 0.0)),
+            token_source=str(d.get("token_source", "approx")),
         )
 
 
@@ -88,6 +97,7 @@ class BudgetStore:
         task_class: TaskClass | str,
         tokens: int,
         outcome: str = "observed",
+        token_source: str = "approx",
     ) -> OutcomeRecord:
         if not self._loaded:
             self.load()
@@ -95,6 +105,7 @@ class BudgetStore:
             task_class=TaskClass.coerce(task_class),
             tokens=int(tokens),
             outcome=outcome,
+            token_source=token_source,
         )
         self._records.append(rec)
         return rec
@@ -111,12 +122,20 @@ class BudgetStore:
         if not self._loaded:
             self.load()
         by_class: Dict[TaskClass, List[int]] = {}
-        source = "approx"
+        source_for: Dict[TaskClass, str] = {}
         for rec in self._records:
             by_class.setdefault(rec.task_class, []).append(rec.tokens)
+            # Same rule as profiler.aggregate: the class is labeled by the
+            # most precise counter any of its observations used.
+            if rec.token_source == "tokenize_api" or rec.task_class not in source_for:
+                source_for[rec.task_class] = rec.token_source
         profs: List[ReasoningProfile] = []
         for cls, toks in sorted(by_class.items(), key=lambda kv: kv[0].value):
-            p = ReasoningProfile(task_class=cls, observed_tokens=toks, token_source=source)
+            p = ReasoningProfile(
+                task_class=cls,
+                observed_tokens=toks,
+                token_source=source_for.get(cls, "approx"),
+            )
             p.recompute()
             profs.append(p)
         return profs
