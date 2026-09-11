@@ -218,7 +218,8 @@ def test_cli_probe_deepseek_profile_mock_end_to_end(tmp_path) -> None:
 def test_cli_probe_unknown_profile_is_clean_error() -> None:
     result = runner.invoke(app, ["probe", "--mock", "--profile", "nope"])
     assert result.exit_code == 2
-    assert "unknown trace pack" in result.output
+    # Whitespace-normalized: rich wraps output at 80 columns in a non-tty.
+    assert "unknown trace pack" in " ".join(result.output.split())
     assert "Traceback" not in result.output
 
 

@@ -17,6 +17,16 @@ from thinkcap.cli import app
 runner = CliRunner()
 
 
+def _flat(output: str) -> str:
+    """Collapse rich's terminal line-wrapping for substring assertions.
+
+    A non-tty rich Console wraps at 80 columns, so multi-word fragments can
+    span lines in CI; asserting on the whitespace-normalized string keeps
+    the tests width-independent.
+    """
+    return " ".join(output.split())
+
+
 def test_probe_unreachable_server_is_clean_error(tmp_path) -> None:
     # Nothing listens on 127.0.0.1:1 — loopback connect is refused
     # instantly on macOS/Linux/CI runners. v0.1.0 printed a 40-line
@@ -34,9 +44,10 @@ def test_probe_unreachable_server_is_clean_error(tmp_path) -> None:
         ],
     )
     assert result.exit_code == 2
-    assert "error:" in result.output
-    assert "http://127.0.0.1:1" in result.output
-    assert "Traceback" not in result.output
+    flat = _flat(result.output)
+    assert "error:" in flat
+    assert "http://127.0.0.1:1" in flat
+    assert "Traceback" not in flat
 
 
 def test_probe_mock_still_succeeds_and_writes_policy(tmp_path) -> None:
@@ -61,7 +72,7 @@ def test_probe_mock_still_succeeds_and_writes_policy(tmp_path) -> None:
 def test_probe_unknown_suite_is_clean_error() -> None:
     result = runner.invoke(app, ["probe", "--suite", "nope", "--mock"])
     assert result.exit_code == 2
-    assert "unknown suite" in result.output
+    assert "unknown suite" in _flat(result.output)
     assert "Traceback" not in result.output
 
 
@@ -76,9 +87,10 @@ def test_serve_invalid_json_policy_is_clean_error(tmp_path) -> None:
     bad.write_text("{broken json", encoding="utf-8")
     result = runner.invoke(app, ["serve", "--policy", str(bad), "--port", "9917"])
     assert result.exit_code == 2
-    assert "error:" in result.output
-    assert "not a valid policy.json" in result.output
-    assert "Traceback" not in result.output
+    flat = _flat(result.output)
+    assert "error:" in flat
+    assert "is not a valid policy.json" in flat
+    assert "Traceback" not in flat
 
 
 def test_serve_wrong_shape_policy_is_clean_error(tmp_path) -> None:
@@ -87,7 +99,7 @@ def test_serve_wrong_shape_policy_is_clean_error(tmp_path) -> None:
     bad.write_text('{"version": "0.1.0", "budgets": "NOT-A-LIST"}', encoding="utf-8")
     result = runner.invoke(app, ["serve", "--policy", str(bad), "--port", "9918"])
     assert result.exit_code == 2
-    assert "not a valid policy.json" in result.output
+    assert "is not a valid policy.json" in _flat(result.output)
     assert "Traceback" not in result.output
 
 
@@ -105,8 +117,9 @@ def test_serve_missing_policy_warns_and_runs_passthrough(
         ["serve", "--policy", str(tmp_path / "missing.json"), "--port", "9919"],
     )
     assert result.exit_code == 0
-    assert "warn" in result.output
-    assert "passthrough-only" in result.output
+    flat = _flat(result.output)
+    assert "warn" in flat
+    assert "passthrough-only" in flat
     assert calls["policy_path"] is None
 
 
