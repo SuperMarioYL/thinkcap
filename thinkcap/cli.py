@@ -16,6 +16,7 @@ import sys
 from pathlib import Path
 from typing import Optional
 
+import httpx
 import typer
 from rich.console import Console
 
@@ -101,24 +102,33 @@ def probe(
             f"responses (no live server)[/dim]"
         )
     else:
-        try:
-            import httpx
-        except ImportError as exc:  # pragma: no cover
-            console.print(f"[red]error:[/red] httpx not installed: {exc}")
-            raise typer.Exit(code=2)
-        client = httpx.Client(timeout=None)
+        # Bounded connect phase so a blackholed host fails fast instead of
+        # hanging; per-request timeouts in _check_tokenize/collect_response
+        # still govern the rest of each call.
+        client = httpx.Client(timeout=httpx.Timeout(None, connect=10.0))
         # quick falsifier check: is /tokenize reachable?
         _check_tokenize(client, server)
 
-    report = run_probe(
-        server=server,
-        suite=suite_obj,
-        client=client,
-        mock_responses=mock_responses,
-        model=model,
-        policy_path=str(policy_out),
-        budget_store_path=str(budgets_out),
-    )
+    try:
+        report = run_probe(
+            server=server,
+            suite=suite_obj,
+            client=client,
+            mock_responses=mock_responses,
+            model=model,
+            policy_path=str(policy_out),
+            budget_store_path=str(budgets_out),
+        )
+    except httpx.HTTPError as exc:
+        # Unreachable server, refused connection, upstream 5xx: surface a
+        # clean error (same contract as the unknown-suite path), not a
+        # traceback. Mock mode never touches the network, so this only
+        # guards the live path.
+        console.print(
+            f"[red]error:[/red] cannot complete probe against llama.cpp "
+            f"server at {server}: {exc}"
+        )
+        raise typer.Exit(code=2)
 
     console.print(render_table(report))
     console.print(
