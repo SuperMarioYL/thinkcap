@@ -27,6 +27,10 @@ import json
 import logging
 from typing import AsyncIterator, List, Optional
 
+import httpx
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse, StreamingResponse
+
 from .config import (
     DEFAULT_PORT,
     DEFAULT_TRACE_PACK,
@@ -38,6 +42,13 @@ from .policy import BudgetPolicy, policy_index, load_policy, should_inject
 from .trace_parser import LiveTraceState, ThinkStreamParser
 
 log = logging.getLogger("thinkcap.proxy")
+
+#: Upstream HTTP budgets. A wedged llama.cpp must fail the agent's request
+#: instead of hanging it forever — the same failure class the v0.2.0 probe
+#: fix removed on the CLI side (cli.probe's bounded connect timeout). The
+#: 180s read budget matches the per-request timeout the profiler already
+#: accepts for slow prompt eval.
+UPSTREAM_TIMEOUT = httpx.Timeout(180.0, connect=10.0)
 
 
 def classify_request(messages: List[dict]) -> TaskClass:
@@ -84,13 +95,12 @@ def create_app(
     (default: Qwen3.8); the live parser and the policy's inception token
     must match the model behind the upstream server.
     """
-    # Local imports: fastapi/httpx are hard deps but keeping them local lets
-    # the pure modules (trace_parser, policy) import without them, which is
-    # what the test suite and the profiler do.
-    from fastapi import FastAPI, Request
-    from fastapi.responses import StreamingResponse
-    import httpx
-
+    # fastapi/httpx are imported at module level: the endpoint's `Request`
+    # annotation must resolve against this module's globals (the module uses
+    # `from __future__ import annotations`, so a create_app-local import left
+    # FastAPI unable to bind it — every request 422'd in v0.2.0). The pure
+    # modules (trace_parser, policy) still import without fastapi; only this
+    # module pays the dependency.
     pack = trace_pack or DEFAULT_TRACE_PACK
     policies: List[BudgetPolicy] = []
     if policy_path:
@@ -128,6 +138,20 @@ def create_app(
             "classes": [c.value for c in app.state.by_class],
         }
 
+    def _upstream_error(status_code: int, message: str) -> JSONResponse:
+        # OpenAI-shaped error body so agent SDKs surface the real failure
+        # instead of parsing a truncated SSE stream that started with 200.
+        return JSONResponse(
+            status_code=status_code,
+            content={
+                "error": {
+                    "message": message,
+                    "type": "upstream_error",
+                    "code": status_code,
+                }
+            },
+        )
+
     @app.post("/v1/chat/completions")
     async def chat_completions(request: Request):
         body = await request.json()
@@ -141,48 +165,72 @@ def create_app(
         body_for_upstream = dict(body)
         body_for_upstream["stream"] = True
 
-        async def generate() -> AsyncIterator[bytes]:
-            parser = ThinkStreamParser(
-                think_start=app.state.trace_pack.think_start,
-                think_end=app.state.trace_pack.think_end,
+        # Start the upstream request BEFORE returning the response so an
+        # upstream failure maps to a real status code; raise_for_status
+        # inside the generator ran after the 200 was already committed.
+        client = httpx.AsyncClient(timeout=UPSTREAM_TIMEOUT)
+        try:
+            upstream = await client.send(
+                client.build_request("POST", upstream_url, json=body_for_upstream),
+                stream=True,
             )
-            state = LiveTraceState(budget=policy.budget_tokens if policy else 0)
-            async with httpx.AsyncClient(timeout=None) as client:
-                async with client.stream(
-                    "POST", upstream_url, json=body_for_upstream
-                ) as upstream:
-                    upstream.raise_for_status()
-                    async for line in upstream.aiter_lines():
-                        if not line:
+        except httpx.HTTPError as exc:
+            await client.aclose()
+            return _upstream_error(
+                502,
+                f"cannot reach llama.cpp upstream at {app.state.upstream}: {exc}",
+            )
+        if upstream.status_code >= 400:
+            detail = (await upstream.aread()).decode("utf-8", "replace")[:500]
+            await upstream.aclose()
+            await client.aclose()
+            return _upstream_error(
+                upstream.status_code,
+                f"upstream llama.cpp at {app.state.upstream} returned "
+                f"{upstream.status_code}: {detail}",
+            )
+
+        async def generate() -> AsyncIterator[bytes]:
+            try:
+                parser = ThinkStreamParser(
+                    think_start=app.state.trace_pack.think_start,
+                    think_end=app.state.trace_pack.think_end,
+                )
+                state = LiveTraceState(budget=policy.budget_tokens if policy else 0)
+                async for line in upstream.aiter_lines():
+                    if not line:
+                        continue
+                    if line.startswith("data:"):
+                        data = line[5:].strip()
+                        if data == "[DONE]":
+                            yield b"data: [DONE]\n\n"
+                            break
+                        try:
+                            obj = json.loads(data)
+                        except json.JSONDecodeError:
+                            yield (line + "\n").encode()
                             continue
-                        if line.startswith("data:"):
-                            data = line[5:].strip()
-                            if data == "[DONE]":
-                                yield b"data: [DONE]\n\n"
-                                break
-                            try:
-                                obj = json.loads(data)
-                            except json.JSONDecodeError:
-                                yield (line + "\n").encode()
-                                continue
-                            delta = (
-                                (obj.get("choices") or [{}])[0].get("delta") or {}
-                            ).get("content") or ""
-                            if delta:
-                                parser.feed(delta)
-                                state.in_think = parser.in_think
-                                state.bytes_seen = parser.bytes_seen
-                                # m2 hook: decide whether to inject.
-                                _maybe_inject(
-                                    state, policy, app.state.enforce
-                                )
-                            yield ("data: " + json.dumps(obj) + "\n\n").encode()
-                    # end of stream — flush any held parser buffer
-                    for kind, text in parser.flush():
-                        # In passthrough/dry-run we do not emit synthesized
-                        # content; this is where m2 would emit the inception
-                        # token and suppressed think tail.
-                        pass
+                        delta = (
+                            (obj.get("choices") or [{}])[0].get("delta") or {}
+                        ).get("content") or ""
+                        if delta:
+                            parser.feed(delta)
+                            state.in_think = parser.in_think
+                            state.bytes_seen = parser.bytes_seen
+                            # m2 hook: decide whether to inject.
+                            _maybe_inject(
+                                state, policy, app.state.enforce
+                            )
+                        yield ("data: " + json.dumps(obj) + "\n\n").encode()
+                # end of stream — flush any held parser buffer
+                for kind, text in parser.flush():
+                    # In passthrough/dry-run we do not emit synthesized
+                    # content; this is where m2 would emit the inception
+                    # token and suppressed think tail.
+                    pass
+            finally:
+                await upstream.aclose()
+                await client.aclose()
 
         return StreamingResponse(
             generate(),
@@ -206,6 +254,11 @@ def _maybe_inject(
         return False
     if not should_inject(state, policy):
         return False
+    # The gate is sticky in BOTH modes: one decision per turn, whether the
+    # governor mutates the stream (enforce) or only logs (dry-run) —
+    # otherwise the advisory log fires again on every streamed delta after
+    # the budget is crossed.
+    state.injected = True
     if enforce:
         # m2: emit policy.inception_token into the stream, mark
         # state.injected = True, and flush the remainder of the think block
@@ -216,11 +269,10 @@ def _maybe_inject(
             policy.budget_tokens,
             state.bytes_seen // 4,
         )
-        state.injected = True
         return True
     log.info(
         "would-inject (dry-run) class=%s budget=%d est_tokens~%d — "
-        "governor ships in m2",
+        "advisory only, the stream is not mutated",
         policy.task_class.value,
         policy.budget_tokens,
         state.bytes_seen // 4,
