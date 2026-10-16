@@ -19,8 +19,8 @@
       "zh": "改变实时流之前，先检查推理预算。"
     },
     "sub": {
-      "en": "thinkcap profiles visible think-block text by task class, stores observations and emits a budget policy for its advisory streaming proxy.",
-      "zh": "thinkcap 按任务类别分析可见 think 块文本，保存观测并生成供提示型流式代理使用的预算策略。"
+      "en": "thinkcap profiles visible think-block text by task class, stores observations and emits a budget policy; its streaming proxy forwards live agent traffic and surfaces upstream failures as real status codes.",
+      "zh": "thinkcap 按任务类别分析可见 think 块文本，保存观测并生成预算策略；其流式代理转发真实 agent 流量，并将上游故障以真实状态码返回。"
     },
     "href": "#quickstart"
   },
@@ -53,6 +53,26 @@
       "body": {
         "en": "Profiles distinguish tokenize results from estimates.",
         "zh": "profile 区分 tokenize 结果与估计。"
+      }
+    },
+    {
+      "title": {
+        "en": "Fail loudly, not silently",
+        "zh": "显式失败而非静默"
+      },
+      "body": {
+        "en": "An upstream failure returns its status code with an OpenAI-shaped error body, never a truncated 200 stream; upstream waits are bounded.",
+        "zh": "上游故障会返回其状态码和 OpenAI 形状的错误体，而不是被截断的 200 流；上游等待有界。"
+      }
+    },
+    {
+      "title": {
+        "en": "Observations survive corruption",
+        "zh": "观测数据不因损坏丢失"
+      },
+      "body": {
+        "en": "A corrupt budgets.json is preserved as a .corrupt sibling and profiling starts fresh; history is never silently destroyed.",
+        "zh": "损坏的 budgets.json 会保留为 .corrupt 副本并重新开始记录，历史不会被静默销毁。"
       }
     }
   ],
@@ -140,8 +160,8 @@
           "zh": "处理过程"
         },
         "body": {
-          "en": "The profiler sends the five-task suite or uses canned responses, extracts marked think blocks and derives per-class p90 budgets. ThinkStreamParser tracks split delimiters and UTF-8 bytes. The FastAPI proxy classifies the request, forwards SSE and logs threshold decisions; it does not currently alter upstream generation.",
-          "zh": "profiler 发送五项任务或使用预设响应，提取标记的 think 块并生成各类 p90 预算。ThinkStreamParser 跟踪跨块分隔符和 UTF-8 字节；FastAPI 代理分类请求、转发 SSE 并记录越界决策，目前不会改变上游生成。"
+          "en": "The profiler sends the five-task suite or uses canned responses, extracts marked think blocks and derives per-class p90 budgets. ThinkStreamParser tracks split delimiters and UTF-8 bytes. The FastAPI proxy classifies each live request, starts the upstream call before responding, forwards SSE, logs threshold decisions once per turn, and returns upstream failures as real status codes; it does not currently alter upstream generation.",
+          "zh": "profiler 发送五项任务或使用预设响应，提取标记的 think 块并生成各类 p90 预算。ThinkStreamParser 跟踪跨块分隔符和 UTF-8 字节；FastAPI 代理对每个实时请求分类、先发起上游调用再响应、转发 SSE、每轮记录一次越界决策，并以真实状态码返回上游故障，目前不会改变上游生成。"
         },
         "image": {
           "light": "/assets/presentation/process-light.svg",
@@ -162,8 +182,8 @@
           "zh": "thinkcap 的内部流程"
         },
         "body": {
-          "en": "The profiler sends the five-task suite or uses canned responses, extracts marked think blocks and derives per-class p90 budgets. ThinkStreamParser tracks split delimiters and UTF-8 bytes. The FastAPI proxy classifies the request, forwards SSE and logs threshold decisions; it does not currently alter upstream generation.",
-          "zh": "profiler 发送五项任务或使用预设响应，提取标记的 think 块并生成各类 p90 预算。ThinkStreamParser 跟踪跨块分隔符和 UTF-8 字节；FastAPI 代理分类请求、转发 SSE 并记录越界决策，目前不会改变上游生成。"
+          "en": "The profiler sends the five-task suite or uses canned responses, extracts marked think blocks and derives per-class p90 budgets. ThinkStreamParser tracks split delimiters and UTF-8 bytes. The FastAPI proxy classifies each live request, starts the upstream call before responding, forwards SSE, logs threshold decisions once per turn, and returns upstream failures as real status codes; it does not currently alter upstream generation.",
+          "zh": "profiler 发送五项任务或使用预设响应，提取标记的 think 块并生成各类 p90 预算。ThinkStreamParser 跟踪跨块分隔符和 UTF-8 字节；FastAPI 代理对每个实时请求分类、先发起上游调用再响应、转发 SSE、每轮记录一次越界决策，并以真实状态码返回上游故障，目前不会改变上游生成。"
         },
         "image": {
           "light": "/assets/presentation/architecture-light.svg",
@@ -208,8 +228,8 @@
           "zh": "配置"
         },
         "body": {
-          "en": "Task classes are rename, bugfix, refactor, new_file and default. Probe uses --server (or THINKCAP_SERVER), --model, --suite, --policy and --budgets; serve uses --upstream (or THINKCAP_UPSTREAM), --port and --policy. The default class falls back to 2048 tokens. The proxy forces streaming and binds 0.0.0.0 without an authentication layer, so deploy only in a suitably controlled network. /health reports configuration, not upstream readiness.",
-          "zh": "任务类包括 rename、bugfix、refactor、new_file、default。probe 提供 --server（或 THINKCAP_SERVER）、--model、--suite、--policy、--budgets；serve 使用 --upstream（或 THINKCAP_UPSTREAM）、--port、--policy。default 回退预算为 2048 token。代理强制流式，绑定 0.0.0.0 且无认证层，应部署于适当受控网络；/health 只报告配置，不验证上游就绪。"
+          "en": "Task classes are rename, bugfix, refactor, new_file and default. Probe uses --server (or THINKCAP_SERVER), --model, --suite, --policy, --budgets and --profile; serve uses --upstream (or THINKCAP_UPSTREAM), --port, --policy and --profile. The default class falls back to 2048 tokens. The proxy forces streaming and binds 0.0.0.0 without an authentication layer, so deploy only in a suitably controlled network; upstream waits are bounded (180s read, 10s connect) and a corrupt budgets.json is preserved as a .corrupt sibling before profiling starts fresh. /health reports configuration, not upstream readiness.",
+          "zh": "任务类包括 rename、bugfix、refactor、new_file、default。probe 提供 --server（或 THINKCAP_SERVER）、--model、--suite、--policy、--budgets、--profile；serve 使用 --upstream（或 THINKCAP_UPSTREAM）、--port、--policy、--profile。default 回退预算为 2048 token。代理强制流式，绑定 0.0.0.0 且无认证层，应部署于适当受控网络；上游等待有界（读 180 秒、连接 10 秒），损坏的 budgets.json 会保留为 .corrupt 副本后重新开始记录。/health 只报告配置，不验证上游就绪。"
         }
       },
       {
