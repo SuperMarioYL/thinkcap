@@ -120,7 +120,7 @@ def create_app(
 
     app = FastAPI(
         title="thinkcap",
-        version="0.2.0",
+        version="0.3.0",
         description="Per-task reasoning-budget governor for Qwen3.8 coding agents.",
     )
     app.state.upstream = upstream.rstrip("/")

@@ -336,8 +336,22 @@ def suites() -> None:
         console.print(f"[cyan]{name}[/cyan] — {len(s.tasks)} tasks")
 
 
+def _print_version(value: bool) -> None:
+    if value:
+        console.print(f"thinkcap {VERSION}")
+        raise typer.Exit()
+
+
 @app.callback()
-def main() -> None:
+def main(
+    version: Optional[bool] = typer.Option(
+        None,
+        "--version",
+        callback=_print_version,
+        is_eager=True,
+        help="Print the installed thinkcap version and exit.",
+    ),
+) -> None:
     """thinkcap — per-task reasoning-budget governor for Qwen3.8."""
     # no-op callback; subcommands carry the logic.
     return

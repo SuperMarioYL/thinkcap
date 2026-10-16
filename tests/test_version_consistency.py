@@ -20,7 +20,7 @@ from thinkcap.config import VERSION
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
-EXPECTED = "0.2.0"
+EXPECTED = "0.3.0"
 
 
 def test_version_file() -> None:
@@ -61,6 +61,20 @@ def test_changelog_has_both_sections() -> None:
     text = (REPO_ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
     assert "## [0.1.0] - 2026-08-17" in text
     assert "## [0.2.0] - 2026-09-11" in text
+    assert "## [0.3.0] - 2026-10-17" in text
+
+
+def test_cli_dash_version_flag() -> None:
+    # `thinkcap --version` must work like the `version` subcommand; before
+    # v0.3.0 the flag was unregistered and exited 2 with an unknown-option
+    # error.
+    from typer.testing import CliRunner
+
+    from thinkcap.cli import app
+
+    result = CliRunner().invoke(app, ["--version"])
+    assert result.exit_code == 0
+    assert f"thinkcap {EXPECTED}" in result.output
 
 
 @pytest.mark.skipif(not shutil.which("thinkcap"), reason="thinkcap not on PATH")

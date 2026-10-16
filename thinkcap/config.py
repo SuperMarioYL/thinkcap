@@ -18,7 +18,7 @@ try:  # VERSION is written by the build; fall back for in-tree runs.
 
     VERSION = _pkg_version("thinkcap")
 except Exception:  # pragma: no cover - not installed
-    VERSION = "0.2.0"
+    VERSION = "0.3.0"
 
 
 class TaskClass(str, Enum):

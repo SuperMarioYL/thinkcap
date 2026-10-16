@@ -11,7 +11,7 @@
   "meta": {
     "visual_style": "neon-particle",
     "demo_source": "docs/demo-results.json",
-    "content_version": "0.2.0"
+    "content_version": "0.3.0"
   },
   "hero": {
     "headline": {

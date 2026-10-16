@@ -4,6 +4,41 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-10-17
+
+### Fixed
+
+- `thinkcap serve` now actually serves: every `/v1/chat/completions` request
+  was rejected with 422 because the `Request` annotation could not be
+  resolved (module-level `from __future__ import annotations` combined with a
+  `create_app`-local fastapi import bound it as a required query parameter).
+  The fastapi/httpx imports now live at module level, and a new streaming
+  test suite exercises the endpoint end-to-end against a mock upstream.
+- Upstream llama.cpp failures surface as real HTTP status codes: a 4xx/5xx
+  from the upstream returns that status with an OpenAI-shaped
+  `{"error": ...}` JSON body, and an unreachable upstream returns 502 —
+  instead of HTTP 200 followed by a truncated SSE stream.
+- The proxy's upstream client now uses bounded timeouts
+  (`httpx.Timeout(180.0, connect=10.0)`, matching the probe path) instead of
+  `timeout=None`, so a wedged llama.cpp fails the agent's request instead of
+  hanging it forever.
+- The advisory dry-run "would-inject" decision is once per turn (the sticky
+  flag is set in both modes) instead of logging on every streamed delta, and
+  the stale "governor ships in m2" log text is replaced with the honest
+  advisory note.
+- A corrupt `budgets.json` (e.g. truncated by a killed probe) is preserved
+  as `budgets.json.corrupt-<timestamp>` and probing starts fresh, instead of
+  silently destroying the accumulated observation history on the next save;
+  if the corrupt file cannot be backed up, probe exits 2 with a clean error
+  rather than overwrite it.
+
+### Changed
+
+- Version lockstep to 0.3.0 across every surface (`VERSION`, pyproject.toml,
+  the config fallback, the `policy.json`/`budgets.json` file versions, the
+  FastAPI app version, `web/site.json` content_version) plus a new
+  `thinkcap --version` flag alongside the existing `version` subcommand.
+
 ## [0.2.0] - 2026-09-11
 
 ### Fixed
