@@ -145,6 +145,12 @@ def probe(
             f"server at {server}: {exc}"
         )
         raise typer.Exit(code=2)
+    except ValueError as exc:
+        # A budgets store that cannot even be backed up refuses to probe
+        # (BudgetStore.load raises instead of overwriting history) — same
+        # clean-error contract, exit 2.
+        console.print(f"[red]error:[/red] {exc}")
+        raise typer.Exit(code=2)
 
     console.print(render_table(report))
     console.print(

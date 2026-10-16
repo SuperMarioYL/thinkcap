@@ -8,6 +8,7 @@ policy is always built from the freshest observations.
 from __future__ import annotations
 
 import json
+import logging
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -15,6 +16,8 @@ from typing import Dict, Iterable, List
 
 from .config import DEFAULT_BUDGET_STORE_PATH, TaskClass
 from .policy import ReasoningProfile
+
+log = logging.getLogger("thinkcap.budget_store")
 
 
 @dataclass
@@ -75,7 +78,34 @@ class BudgetStore:
             return self._records
         try:
             data = json.loads(self.path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
+        except json.JSONDecodeError as exc:
+            # The store's contract is append-only accumulation, so a file
+            # truncated by a killed probe (or mangled by hand) must never be
+            # silently destroyed by the next save(). Preserve the corrupt
+            # bytes as a .corrupt-<ns> sibling and start fresh; if even the
+            # rename fails, refuse rather than overwrite history.
+            backup = self.path.with_suffix(
+                self.path.suffix + f".corrupt-{time.time_ns()}"
+            )
+            try:
+                self.path.rename(backup)
+            except OSError as rename_exc:
+                raise ValueError(
+                    f"budgets store {self.path} is corrupt ({exc}) and could "
+                    f"not be backed up ({rename_exc}); move or fix it before "
+                    f"probing"
+                ) from exc
+            log.warning(
+                "budgets store %s was corrupt (%s); original preserved as %s "
+                "— starting fresh",
+                self.path,
+                exc,
+                backup,
+            )
+            self._records = []
+            self._loaded = True
+            return self._records
+        except OSError:
             self._records = []
             self._loaded = True
             return self._records
