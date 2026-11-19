@@ -20,6 +20,7 @@ thinkcap 按任务类别分析可见 think 块文本，保存观测并生成供�
 - **区分任务类别** — 各任务类保留自己的观测分布。
 - **处理跨块分隔符** — 解析器跨 chunk 跟踪不完整标记。
 - **保留计数来源** — profile 区分 tokenize 结果与估计。
+- **拒绝无意义测量** — 整轮响应都没有匹配所选 trace pack 分隔符时，probe 报错退出，不写出零分布预算。
 
 ## 架构
 
@@ -95,7 +96,7 @@ thinkcap serve --upstream http://localhost:8080 --port 8088 --policy policy.json
 
 ## 配置
 
-任务类包括 rename、bugfix、refactor、new_file、default。probe 提供 --server（或 THINKCAP_SERVER）、--model、--suite、--policy、--budgets、--profile；serve 使用 --upstream（或 THINKCAP_UPSTREAM）、--port、--policy、--profile。default 回退预算为 2048 token。--profile 选择 trace pack（模型分隔符表面）：qwen3.8（默认，`<|im_start|>think`/`<|im_end|>`）、deepseek-r1 与 glm-4.6-z1（均为 `<think>`/`</think>`）；同一 budgets.json 中不同 pack 的观测分布互不混合。代理强制流式，绑定 0.0.0.0 且无认证层，应部署于适当受控网络；/health 只报告配置，不验证上游就绪。
+任务类包括 rename、bugfix、refactor、new_file、default。probe 提供 --server（或 THINKCAP_SERVER）、--model、--suite、--policy、--budgets、--profile；serve 使用 --upstream（或 THINKCAP_UPSTREAM）、--port、--policy、--profile。default 回退预算为 2048 token。--profile 选择 trace pack（模型分隔符表面）：qwen3.8（默认，`<|im_start|>think`/`<|im_end|>`）、deepseek-r1 与 glm-4.6-z1（均为 `<think>`/`</think>`）；同一 budgets.json 中不同 pack 的观测分布互不混合。若 policy.json 的行缺少字段或预算不是整数，serve 会以干净错误退出（exit 2），--policy 指向的新目录会自动创建；结构不正确的 budgets.json 与损坏文件一样保留为 .corrupt 副本。probe 的上游等待有界（completions 180 秒读、/tokenize 30 秒读，连接均 10 秒）。代理强制流式，绑定 0.0.0.0 且无认证层，应部署于适当受控网络；/health 只报告配置，不验证上游就绪。
 
 ## 集成与职责分工
 

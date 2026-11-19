@@ -4,6 +4,43 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-11-20
+
+### Fixed
+
+- `thinkcap serve` no longer crashes with a raw `KeyError`/`TypeError`
+  traceback on a malformed `policy.json` row. A row that is not a mapping,
+  omits `task_class`/`budget_tokens`, or carries a non-integer budget is now
+  a clean `error: policy ... is not a valid policy.json: ...` with exit 2,
+  and programmatic `create_app` callers degrade to passthrough. Before this
+  release only invalid JSON and a non-list `budgets` were handled; a
+  hand-edited or partially written row escaped as a traceback.
+- A `budgets.json` that is valid JSON but not the store shape (a `records`
+  value that is not a list of objects, or a bare scalar) is now preserved as
+  a `.corrupt-<ns>` sibling and probing starts fresh, instead of being read
+  as an empty history and overwritten by the next save. An existing store
+  that cannot be read is a clean error rather than an empty history.
+- `thinkcap probe` refuses a run in which no captured response contains the
+  selected `--profile`'s delimiters, instead of recording 0-token
+  observations and writing a policy with fabricated 1-token budgets (for
+  example `--mock --profile deepseek-r1` against the Qwen3.8-shaped demo
+  fixtures). The error names the pack and its delimiters, and no artifact is
+  written.
+- Probe HTTP calls now carry explicit `httpx.Timeout` objects: 180s read /
+  10s connect for chat completions and 30s read / 10s connect for
+  `/tokenize`. The previous bare float timeouts also raised the connect
+  budget, silently voiding the bounded 10s connect added in v0.2.0.
+- `save_policy` creates the parent directory of `--policy` when it does not
+  exist, matching the `--budgets` writer, instead of failing after the run
+  had already been recorded.
+
+### Changed
+
+- Version lockstep to 0.4.0 across every surface (`VERSION`, pyproject.toml,
+  the config fallback, the `policy.json`/`budgets.json` file versions, the
+  FastAPI app version, `web/site.json` content_version) and
+  `CHANGELOG.md`/README updates describing the fixed contracts.
+
 ## [0.3.0] - 2026-10-17
 
 ### Fixed

@@ -11,7 +11,7 @@
   "meta": {
     "visual_style": "neon-particle",
     "demo_source": "docs/demo-results.json",
-    "content_version": "0.3.0"
+    "content_version": "0.4.0"
   },
   "hero": {
     "headline": {
@@ -61,8 +61,8 @@
         "zh": "显式失败而非静默"
       },
       "body": {
-        "en": "An upstream failure returns its status code with an OpenAI-shaped error body, never a truncated 200 stream; upstream waits are bounded.",
-        "zh": "上游故障会返回其状态码和 OpenAI 形状的错误体，而不是被截断的 200 流；上游等待有界。"
+        "en": "An upstream failure returns its status code with an OpenAI-shaped error body, never a truncated 200 stream; upstream waits are bounded. A malformed policy.json row and a probe whose delimiters never matched the selected trace pack fail with a clean error instead of a traceback or a zero budget.",
+        "zh": "上游故障会返回其状态码和 OpenAI 形状的错误体，而不是被截断的 200 流；上游等待有界。policy.json 行格式错误、或整轮响应都未匹配所选 trace pack 时，会以干净错误退出，而不是抛出 traceback 或写出零预算。"
       }
     },
     {
@@ -71,8 +71,8 @@
         "zh": "观测数据不因损坏丢失"
       },
       "body": {
-        "en": "A corrupt budgets.json is preserved as a .corrupt sibling and profiling starts fresh; history is never silently destroyed.",
-        "zh": "损坏的 budgets.json 会保留为 .corrupt 副本并重新开始记录，历史不会被静默销毁。"
+        "en": "A corrupt budgets.json — including valid JSON that is not the store shape — is preserved as a .corrupt sibling and profiling starts fresh; history is never silently destroyed.",
+        "zh": "损坏的 budgets.json（包括结构不正确的合法 JSON）会保留为 .corrupt 副本并重新开始记录，历史不会被静默销毁。"
       }
     }
   ],
@@ -228,8 +228,8 @@
           "zh": "配置"
         },
         "body": {
-          "en": "Task classes are rename, bugfix, refactor, new_file and default. Probe uses --server (or THINKCAP_SERVER), --model, --suite, --policy, --budgets and --profile; serve uses --upstream (or THINKCAP_UPSTREAM), --port, --policy and --profile. The default class falls back to 2048 tokens. The proxy forces streaming and binds 0.0.0.0 without an authentication layer, so deploy only in a suitably controlled network; upstream waits are bounded (180s read, 10s connect) and a corrupt budgets.json is preserved as a .corrupt sibling before profiling starts fresh. /health reports configuration, not upstream readiness.",
-          "zh": "任务类包括 rename、bugfix、refactor、new_file、default。probe 提供 --server（或 THINKCAP_SERVER）、--model、--suite、--policy、--budgets、--profile；serve 使用 --upstream（或 THINKCAP_UPSTREAM）、--port、--policy、--profile。default 回退预算为 2048 token。代理强制流式，绑定 0.0.0.0 且无认证层，应部署于适当受控网络；上游等待有界（读 180 秒、连接 10 秒），损坏的 budgets.json 会保留为 .corrupt 副本后重新开始记录。/health 只报告配置，不验证上游就绪。"
+          "en": "Task classes are rename, bugfix, refactor, new_file and default. Probe uses --server (or THINKCAP_SERVER), --model, --suite, --policy, --budgets and --profile; serve uses --upstream (or THINKCAP_UPSTREAM), --port, --policy and --profile. The default class falls back to 2048 tokens. The proxy forces streaming and binds 0.0.0.0 without an authentication layer, so deploy only in a suitably controlled network; upstream waits are bounded (180s/30s read, 10s connect) and a corrupt or wrongly shaped budgets.json is preserved as a .corrupt sibling before profiling starts fresh. A malformed policy row exits serve with a clean error, and a new directory named by --policy is created. /health reports configuration, not upstream readiness.",
+          "zh": "任务类包括 rename、bugfix、refactor、new_file、default。probe 提供 --server（或 THINKCAP_SERVER）、--model、--suite、--policy、--budgets、--profile；serve 使用 --upstream（或 THINKCAP_UPSTREAM）、--port、--policy、--profile。default 回退预算为 2048 token。代理强制流式，绑定 0.0.0.0 且无认证层，应部署于适当受控网络；上游等待有界（读 180/30 秒、连接 10 秒），损坏或结构不正确的 budgets.json 会保留为 .corrupt 副本后重新开始记录。policy.json 行格式错误时 serve 以干净错误退出；--policy 指向的新目录会自动创建。/health 只报告配置，不验证上游就绪。"
         }
       },
       {

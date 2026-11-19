@@ -82,3 +82,61 @@ def test_readable_store_loads_unchanged(tmp_path) -> None:
     profiles = BudgetStore(budgets).profiles()
     assert len(profiles) == 1
     assert profiles[0].observed_tokens == [620]
+
+
+# --- a valid-JSON store of the wrong shape must not be emptied ---------------
+
+
+def test_wrong_shape_records_is_quarantined_not_overwritten(tmp_path) -> None:
+    # fail-before (v0.3.0): load() only catches JSONDecodeError, so a
+    # syntactically valid but non-store file (records is a string, e.g. a
+    # partially mangled write) loads as [] and the next save() rewrites it —
+    # the accumulated history is destroyed with no warning and no backup.
+    budgets = tmp_path / "budgets.json"
+    original = '{"version":"0.3.0","records":"truncated"}'
+    budgets.write_text(original, encoding="utf-8")
+
+    result = runner.invoke(
+        app,
+        [
+            "probe",
+            "--mock",
+            "--policy",
+            str(tmp_path / "policy.json"),
+            "--budgets",
+            str(budgets),
+        ],
+    )
+
+    assert result.exit_code == 0
+    siblings = list(tmp_path.glob("budgets.json.corrupt-*"))
+    assert len(siblings) == 1
+    assert siblings[0].read_text(encoding="utf-8") == original
+    assert len(json.loads(budgets.read_text(encoding="utf-8"))["records"]) == 5
+
+
+def test_non_iterable_store_json_is_quarantined(tmp_path) -> None:
+    # fail-before: `for r in rows` raised TypeError ('int' object is not
+    # iterable) straight through the CLI.
+    path = tmp_path / "budgets.json"
+    path.write_text("42", encoding="utf-8")
+    store = BudgetStore(path)
+    assert store.load() == []
+    assert len(list(tmp_path.glob("budgets.json.corrupt-*"))) == 1
+    assert not path.exists()
+
+
+def test_unreadable_store_raises_clean_error(tmp_path, monkeypatch) -> None:
+    # fail-before: OSError was swallowed as "empty store", so a file that
+    # could not be read looked like no history and could be overwritten later.
+    path = tmp_path / "budgets.json"
+    path.write_text('{"version": "0.3.0", "records": []}', encoding="utf-8")
+
+    def _boom(self, *args, **kwargs):
+        raise OSError("permission denied")
+
+    monkeypatch.setattr("pathlib.Path.read_text", _boom)
+    with pytest.raises(ValueError, match="could not be read"):
+        BudgetStore(path).load()
+    # The bytes are untouched (read_bytes, not the patched read_text).
+    assert b'"records"' in path.read_bytes()

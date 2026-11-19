@@ -20,6 +20,8 @@ import json
 from dataclasses import dataclass, field
 from typing import Callable, Dict, List, Optional, Tuple
 
+import httpx
+
 from .budget_store import BudgetStore
 from .config import (
     DEFAULT_BUDGET_STORE_PATH,
@@ -45,6 +47,15 @@ from .trace_parser import (
 )
 
 
+#: Per-request budgets for the live path. These must be explicit Timeout
+#: objects: httpx replaces the client's defaults for a request, so passing a
+#: bare ``timeout=180`` (or ``30``) would also raise the *connect* budget and
+#: silently void the bounded 10s connect the client is built with
+#: (cli.py probe).
+PROBE_TIMEOUT = httpx.Timeout(180.0, connect=10.0)
+TOKENIZE_TIMEOUT = httpx.Timeout(30.0, connect=10.0)
+
+
 @dataclass
 class TaskResult:
     """One task's measurement: class, tokens, source, raw response."""
@@ -54,6 +65,7 @@ class TaskResult:
     reasoning_tokens: int
     token_source: str
     raw_response: str = ""
+    think_blocks: int = 0
 
 
 @dataclass
@@ -118,7 +130,7 @@ def collect_response(
         "max_tokens": 2048,
     }
     parts: List[str] = []
-    with client.stream("POST", url, json=payload, timeout=180) as resp:
+    with client.stream("POST", url, json=payload, timeout=PROBE_TIMEOUT) as resp:
         resp.raise_for_status()
         for line in resp.iter_lines():
             if not line:
@@ -170,6 +182,7 @@ def profile_task(
         reasoning_tokens=n_tokens,
         token_source=source,
         raw_response=response,
+        think_blocks=len(blocks),
     )
 
 
@@ -236,7 +249,12 @@ def probe(
     """
     pack = trace_pack or DEFAULT_TRACE_PACK
     if tokenize_fn is None:
-        tokenize_fn = make_tokenize_fn(client=client, server=server, prefer_api=True)
+        tokenize_fn = make_tokenize_fn(
+            client=client,
+            server=server,
+            prefer_api=True,
+            timeout=TOKENIZE_TIMEOUT,
+        )
 
     results: List[TaskResult] = []
     for task in suite.tasks:
@@ -250,6 +268,22 @@ def probe(
                 )
             response = collect_response(client, server, task, model=model)
         results.append(profile_task(task, response, tokenize_fn, trace_pack=pack))
+
+    # A run where the selected pack never matched is not a measurement: the
+    # tokenizer would see empty text for every task, and the policy built
+    # from those zeros (budget 1 token) is fabricated. Fail before anything
+    # is recorded so a wrong --profile cannot pollute the pack's history.
+    if not any(result.think_blocks for result in results):
+        hint = (
+            " (the built-in --mock responses use Qwen3.8 delimiters)"
+            if mock_responses is not None
+            else ""
+        )
+        raise ValueError(
+            f"no think blocks matched the '{pack.name}' trace pack in "
+            f"{len(results)} responses — expected '{pack.think_start}' ... "
+            f"'{pack.think_end}'; check --profile{hint}"
+        )
 
     profiles = aggregate(results)
 

@@ -20,7 +20,7 @@ from thinkcap.config import VERSION
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
-EXPECTED = "0.3.0"
+EXPECTED = "0.4.0"
 
 
 def test_version_file() -> None:
@@ -62,6 +62,7 @@ def test_changelog_has_both_sections() -> None:
     assert "## [0.1.0] - 2026-08-17" in text
     assert "## [0.2.0] - 2026-09-11" in text
     assert "## [0.3.0] - 2026-10-17" in text
+    assert "## [0.4.0] - 2026-11-20" in text
 
 
 def test_cli_dash_version_flag() -> None:

@@ -191,7 +191,12 @@ def test_probe_pack_distributions_do_not_mix(tmp_path) -> None:
 # --- CLI surface ------------------------------------------------------------
 
 
-def test_cli_probe_deepseek_profile_mock_end_to_end(tmp_path) -> None:
+def test_cli_probe_deepseek_profile_mock_is_clean_error(tmp_path) -> None:
+    # fail-before (v0.3.0): the Qwen3.8-shaped --mock fixtures match nothing
+    # under the deepseek pack, yet probe recorded five 0-token observations
+    # and wrote a policy with 1-token budgets, exiting 0.
+    policy_path = tmp_path / "policy.json"
+    budgets_path = tmp_path / "budgets.json"
     result = runner.invoke(
         app,
         [
@@ -200,19 +205,18 @@ def test_cli_probe_deepseek_profile_mock_end_to_end(tmp_path) -> None:
             "--profile",
             "deepseek-r1",
             "--policy",
-            str(tmp_path / "policy.json"),
+            str(policy_path),
             "--budgets",
-            str(tmp_path / "budgets.json"),
+            str(budgets_path),
         ],
     )
-    # --mock canned responses are Qwen3.8-shaped, so the deepseek pack
-    # profiles them as zero-think responses — the pipeline still runs,
-    # writes artifacts, and exits 0.
-    assert result.exit_code == 0
-    policy = json.loads((tmp_path / "policy.json").read_text(encoding="utf-8"))
-    assert all(
-        b["inception_token"].endswith("</think>") for b in policy["budgets"]
-    )
+    assert result.exit_code == 2
+    flat = " ".join(result.output.split())
+    assert "error:" in flat
+    assert "deepseek-r1" in flat
+    assert "Traceback" not in result.output
+    assert not policy_path.exists()
+    assert not budgets_path.exists()
 
 
 def test_cli_probe_unknown_profile_is_clean_error() -> None:

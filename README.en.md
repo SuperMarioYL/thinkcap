@@ -20,6 +20,7 @@ A rename and a refactor may produce different trace lengths. Separate their obse
 - **Separate task classes** — Each class keeps its own observed distribution.
 - **Handle split delimiters** — The parser tracks incomplete markers across chunks.
 - **Keep count provenance** — Profiles distinguish tokenize results from estimates.
+- **Refuse meaningless runs** — A probe whose responses never matched the selected trace pack exits with an error instead of writing a zero profile.
 
 ## Architecture
 
@@ -95,7 +96,7 @@ thinkcap serve --upstream http://localhost:8080 --port 8088 --policy policy.json
 
 ## Configuration
 
-Task classes are rename, bugfix, refactor, new_file and default. Probe uses --server (or THINKCAP_SERVER), --model, --suite, --policy, --budgets and --profile; serve uses --upstream (or THINKCAP_UPSTREAM), --port, --policy and --profile. The default class falls back to 2048 tokens. --profile selects the trace pack (model delimiter surface): qwen3.8 (default, `<|im_start|>think`/`<|im_end|>`), deepseek-r1 and glm-4.6-z1 (both `<think>`/`</think>`); observations recorded in one budgets.json keep separate distributions per pack. The proxy forces streaming and binds 0.0.0.0 without an authentication layer, so deploy only in a suitably controlled network. /health reports configuration, not upstream readiness.
+Task classes are rename, bugfix, refactor, new_file and default. Probe uses --server (or THINKCAP_SERVER), --model, --suite, --policy, --budgets and --profile; serve uses --upstream (or THINKCAP_UPSTREAM), --port, --policy and --profile. The default class falls back to 2048 tokens. --profile selects the trace pack (model delimiter surface): qwen3.8 (default, `<|im_start|>think`/`<|im_end|>`), deepseek-r1 and glm-4.6-z1 (both `<think>`/`</think>`); observations recorded in one budgets.json keep separate distributions per pack. A policy.json row with missing fields or a non-integer budget makes serve exit 2 with a clean error, a new directory named by --policy is created, and a budgets.json that is valid JSON but not the store shape is preserved as a .corrupt sibling like a corrupt file. Probe waits are bounded (180s read for completions, 30s read for /tokenize, 10s connect for both). The proxy forces streaming and binds 0.0.0.0 without an authentication layer, so deploy only in a suitably controlled network. /health reports configuration, not upstream readiness.
 
 ## Integrations and responsibilities
 

@@ -79,45 +79,56 @@ class BudgetStore:
         try:
             data = json.loads(self.path.read_text(encoding="utf-8"))
         except json.JSONDecodeError as exc:
-            # The store's contract is append-only accumulation, so a file
-            # truncated by a killed probe (or mangled by hand) must never be
-            # silently destroyed by the next save(). Preserve the corrupt
-            # bytes as a .corrupt-<ns> sibling and start fresh; if even the
-            # rename fails, refuse rather than overwrite history.
-            backup = self.path.with_suffix(
-                self.path.suffix + f".corrupt-{time.time_ns()}"
+            return self._quarantine(exc)
+        except OSError as exc:
+            # An existing file that cannot be read is not an empty history:
+            # starting fresh here would let the next save() overwrite
+            # observations we simply failed to read.
+            raise ValueError(
+                f"budgets store {self.path} exists but could not be read "
+                f"({exc}); move or fix it before probing"
+            ) from exc
+        # The store is either {"version": ..., "records": [...]} or, for
+        # hand-written files, a bare record list. Anything else is a file we
+        # cannot aggregate; quarantining it preserves the bytes instead of
+        # silently dropping the whole distribution on the next save.
+        rows = data.get("records") if isinstance(data, dict) else data
+        if not isinstance(rows, list) or not all(isinstance(r, dict) for r in rows):
+            return self._quarantine(
+                ValueError("expected a 'records' list of objects")
             )
-            try:
-                self.path.rename(backup)
-            except OSError as rename_exc:
-                raise ValueError(
-                    f"budgets store {self.path} is corrupt ({exc}) and could "
-                    f"not be backed up ({rename_exc}); move or fix it before "
-                    f"probing"
-                ) from exc
-            log.warning(
-                "budgets store %s was corrupt (%s); original preserved as %s "
-                "— starting fresh",
-                self.path,
-                exc,
-                backup,
-            )
-            self._records = []
-            self._loaded = True
-            return self._records
-        except OSError:
-            self._records = []
-            self._loaded = True
-            return self._records
-        rows = data.get("records", []) if isinstance(data, dict) else data
-        self._records = [OutcomeRecord.from_dict(r) for r in rows if isinstance(r, dict)]
+        self._records = [OutcomeRecord.from_dict(r) for r in rows]
+        self._loaded = True
+        return self._records
+
+    def _quarantine(self, exc: Exception) -> List[OutcomeRecord]:
+        """Preserve unusable bytes as a sibling and start a fresh log."""
+        backup = self.path.with_suffix(
+            self.path.suffix + f".corrupt-{time.time_ns()}"
+        )
+        try:
+            self.path.rename(backup)
+        except OSError as rename_exc:
+            raise ValueError(
+                f"budgets store {self.path} is corrupt ({exc}) and could "
+                f"not be backed up ({rename_exc}); move or fix it before "
+                f"probing"
+            ) from exc
+        log.warning(
+            "budgets store %s was corrupt (%s); original preserved as %s "
+            "— starting fresh",
+            self.path,
+            exc,
+            backup,
+        )
+        self._records = []
         self._loaded = True
         return self._records
 
     def save(self) -> Path:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         data = {
-            "version": "0.3.0",
+            "version": "0.4.0",
             "records": [r.to_dict() for r in self._records],
         }
         self.path.write_text(

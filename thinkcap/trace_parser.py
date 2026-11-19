@@ -308,6 +308,7 @@ def make_tokenize_fn(
     client=None,
     server: str = "",
     prefer_api: bool = True,
+    timeout=None,
 ) -> TokenizeFn:
     """Build a tokenize function bound to a server (or pure-fallback).
 
@@ -316,15 +317,22 @@ def make_tokenize_fn(
     missing, special tokens confusing the tokenizer — the m1 falsifier), it
     falls back to :func:`count_tokens_approx` and labels the source
     ``"approx"`` so the rich table honestly says so.
+
+    ``timeout`` is the value handed to httpx for that POST. The profiler
+    passes an explicit ``httpx.Timeout`` with a bounded connect phase; left
+    as None the client's own default applies (httpx treats an explicit
+    ``None`` differently, so the keyword is omitted).
     """
 
     def _tokenize(text: str) -> Tuple[int, str]:
         if prefer_api and client is not None and server:
+            kwargs = {"json": {"content": text}}
+            if timeout is not None:
+                kwargs["timeout"] = timeout
             try:
                 resp = client.post(
                     f"{server.rstrip('/')}/tokenize",
-                    json={"content": text},
-                    timeout=30,
+                    **kwargs,
                 )
                 resp.raise_for_status()
                 payload = resp.json()

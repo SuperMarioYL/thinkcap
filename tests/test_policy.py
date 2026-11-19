@@ -164,7 +164,7 @@ def test_policy_file_is_valid_json_with_budgets_key(tmp_path) -> None:
     path = tmp_path / "policy.json"
     save_policy(policies, path)
     data = json.loads(path.read_text(encoding="utf-8"))
-    assert data["version"] == "0.3.0"
+    assert data["version"] == "0.4.0"
     assert isinstance(data["budgets"], list)
     assert any(b["task_class"] == "rename" for b in data["budgets"])
 
@@ -236,3 +236,36 @@ def test_budget_policy_from_dict_coerces_unknown_class_to_default() -> None:
     )
     assert p.task_class == TaskClass.DEFAULT
     assert p.budget_tokens == 10
+
+
+# --- malformed policy rows must be a clean config error -------------------
+
+
+def test_budget_policy_from_dict_rejects_non_mapping_row() -> None:
+    # fail-before: a JSON array row (e.g. {"budgets": ["x"]}) reached
+    # d["task_class"] and raised TypeError out of load_policy, which
+    # cli.serve does not catch.
+    with pytest.raises(ValueError, match="mapping"):
+        BudgetPolicy.from_dict("NOT-A-ROW")
+
+
+def test_budget_policy_from_dict_rejects_missing_budget_tokens() -> None:
+    # fail-before: KeyError 'budget_tokens' escaped serve as a traceback.
+    with pytest.raises(ValueError, match="budget_tokens"):
+        BudgetPolicy.from_dict({"task_class": "default"})
+
+
+def test_budget_policy_from_dict_rejects_non_integer_budget() -> None:
+    # fail-before: int(None) raised TypeError out of serve.
+    with pytest.raises(ValueError, match="budget_tokens"):
+        BudgetPolicy.from_dict({"task_class": "default", "budget_tokens": None})
+
+
+def test_save_policy_creates_missing_parent_dir(tmp_path) -> None:
+    # fail-before: FileNotFoundError after the probe run had already
+    # appended its observations.
+    path = save_policy(
+        [BudgetPolicy(task_class=TaskClass.DEFAULT, budget_tokens=100)],
+        tmp_path / "nested" / "config" / "policy.json",
+    )
+    assert path.exists()

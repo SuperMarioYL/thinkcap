@@ -65,9 +65,28 @@ class BudgetPolicy:
 
     @classmethod
     def from_dict(cls, d: dict) -> "BudgetPolicy":
+        # A policy.json row is user-supplied config: reject a row the runtime
+        # cannot use with one ValueError (cli.serve and create_app already
+        # turn ValueError into a clean error / passthrough) instead of
+        # letting a KeyError/TypeError escape as a traceback. The lenient
+        # unknown-class -> default coercion stays: the proxy falls back to
+        # the default row either way.
+        if not isinstance(d, dict):
+            raise ValueError(f"budget row must be a mapping, got {type(d).__name__}")
+        if "task_class" not in d or "budget_tokens" not in d:
+            missing = [k for k in ("task_class", "budget_tokens") if k not in d]
+            raise ValueError(f"budget row is missing {', '.join(missing)}: {d!r}")
+        if not isinstance(d["task_class"], str):
+            raise ValueError(f"budget row has a non-string task_class: {d!r}")
+        try:
+            budget_tokens = int(d["budget_tokens"])
+        except (TypeError, ValueError) as exc:
+            raise ValueError(
+                f"budget row has a non-integer budget_tokens: {d!r}"
+            ) from exc
         return cls(
             task_class=TaskClass.coerce(d["task_class"]),
-            budget_tokens=int(d["budget_tokens"]),
+            budget_tokens=budget_tokens,
             source=str(d.get("source", "p90_observed")),
             inception_token=str(d.get("inception_token", DEFAULT_INCEPTION_TOKEN)),
         )
@@ -138,8 +157,9 @@ def save_policy(
 ) -> Path:
     """Write the policy as ``policy.json`` (the file the m2 proxy loads)."""
     out = Path(path)
+    out.parent.mkdir(parents=True, exist_ok=True)
     data = {
-        "version": "0.3.0",
+        "version": "0.4.0",
         "budgets": [p.to_dict() for p in policies],
     }
     out.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")

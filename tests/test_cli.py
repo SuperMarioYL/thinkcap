@@ -156,3 +156,47 @@ def test_create_app_with_malformed_policy_degrades_to_passthrough(tmp_path) -> N
     body = resp.json()
     assert body["enforce"] is False
     assert body["classes"] == []
+
+
+# --- policy rows: malformed must be clean, not a traceback ----------------
+
+
+def test_serve_non_mapping_policy_row_is_clean_error(tmp_path) -> None:
+    # fail-before: TypeError ('str' indices) escaped cli.serve as a traceback
+    # with exit 1, although the file is a user-passed policy.
+    bad = tmp_path / "row.json"
+    bad.write_text('{"budgets": ["NOT-A-ROW"]}', encoding="utf-8")
+    result = runner.invoke(app, ["serve", "--policy", str(bad), "--port", "9921"])
+    assert result.exit_code == 2
+    flat = _flat(result.output)
+    assert "error:" in flat
+    assert "is not a valid policy.json" in flat
+    assert "Traceback" not in result.output
+
+
+def test_serve_row_missing_budget_is_clean_error(tmp_path) -> None:
+    # fail-before: KeyError 'budget_tokens' escaped as a traceback.
+    bad = tmp_path / "nobudget.json"
+    bad.write_text('{"budgets": [{"task_class": "default"}]}', encoding="utf-8")
+    result = runner.invoke(app, ["serve", "--policy", str(bad), "--port", "9922"])
+    assert result.exit_code == 2
+    assert "is not a valid policy.json" in _flat(result.output)
+    assert "Traceback" not in result.output
+
+
+def test_create_app_with_non_mapping_policy_row_degrades_to_passthrough(
+    tmp_path,
+) -> None:
+    # fail-before: create_app only caught (FileNotFoundError, ValueError,
+    # OSError), so a TypeError/KeyError from a malformed row propagated to
+    # programmatic callers instead of degrading.
+    from fastapi.testclient import TestClient
+
+    from thinkcap.proxy import create_app
+
+    bad = tmp_path / "row.json"
+    bad.write_text('{"budgets": ["NOT-A-ROW"]}', encoding="utf-8")
+    app = create_app(policy_path=str(bad))
+    body = TestClient(app).get("/health").json()
+    assert body["enforce"] is False
+    assert body["classes"] == []

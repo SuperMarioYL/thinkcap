@@ -12,7 +12,9 @@ import json
 
 from thinkcap.config import THINK_END, THINK_START, TaskClass, get_suite
 from thinkcap.policy import percentile
-from thinkcap.profiler import probe
+import pytest
+
+from thinkcap.profiler import collect_response, probe
 
 
 def _resp(body: str) -> str:
@@ -163,3 +165,115 @@ def test_v010_store_files_load_without_token_source(tmp_path) -> None:
     assert profiles[0].task_class == TaskClass.RENAME
     assert profiles[0].observed_tokens == [620]
     assert profiles[0].token_source == "approx"
+
+
+# --- a run whose delimiters never matched is not a measurement -------------
+
+
+def test_probe_with_no_matching_think_blocks_raises(tmp_path) -> None:
+    # fail-before: probe recorded five 0-token observations, printed an
+    # all-zero table and wrote policy.json with 1-token budgets (exit 0) —
+    # e.g. `probe --mock --profile deepseek-r1` against Qwen-shaped fixtures.
+    suite = get_suite("coding-mini")
+    no_think = {task.task_id: "plain answer, no delimiters" for task in suite.tasks}
+    policy_path = tmp_path / "policy.json"
+    budgets_path = tmp_path / "budgets.json"
+
+    with pytest.raises(ValueError, match="think blocks"):
+        probe(
+            "http://mock",
+            suite,
+            mock_responses=no_think,
+            tokenize_fn=_stub_tokenize,
+            policy_path=str(policy_path),
+            budget_store_path=str(budgets_path),
+        )
+
+    # The failure is decided before anything is written.
+    assert not policy_path.exists()
+    assert not budgets_path.exists()
+
+
+def test_probe_records_zero_token_class_when_one_block_matched(tmp_path) -> None:
+    # A pack that matched somewhere keeps its measured observations,
+    # including a genuine zero-reasoning response.
+    suite = get_suite("coding-mini")
+    mixed = {
+        "rename-01": _resp("x " * 10),
+        "rename-02": _resp("x " * 10),
+        "bugfix-01": "no think here",
+        "refactor-01": "no think here",
+        "newfile-01": "no think here",
+    }
+    report = probe(
+        "http://mock",
+        suite,
+        mock_responses=mixed,
+        tokenize_fn=_stub_tokenize,
+        policy_path=str(tmp_path / "policy.json"),
+        budget_store_path=str(tmp_path / "budgets.json"),
+    )
+    assert any(p.task_class == TaskClass.RENAME for p in report.profiles)
+
+
+# --- probe HTTP calls keep the documented bounded connect ------------------
+
+
+class _RecordingClient:
+    """Records the timeout actually handed to httpx for each call."""
+
+    def __init__(self) -> None:
+        self.calls = []
+
+    def stream(self, method, url, json=None, timeout=None):
+        self.calls.append(("stream", timeout))
+
+        class _Ctx:
+            def __enter__(self):
+                class _Resp:
+                    def raise_for_status(self):
+                        pass
+
+                    def iter_lines(self):
+                        return iter([])
+
+                return _Resp()
+
+            def __exit__(self, *exc):
+                return False
+
+        return _Ctx()
+
+    def post(self, url, json=None, timeout=None):
+        self.calls.append(("post", timeout))
+        raise RuntimeError("offline")
+
+
+def test_collect_response_passes_bounded_connect_timeout() -> None:
+    # fail-before: timeout was the float 180, which httpx expands to
+    # connect=180 and silently replaces the client's 10s connect budget.
+    client = _RecordingClient()
+    collect_response(client, "http://localhost:8080", get_suite("coding-mini").tasks[0])
+    kind, timeout = client.calls[-1]
+    assert kind == "stream"
+    assert timeout.connect == 10.0
+    assert timeout.read == 180.0
+
+
+def test_probe_tokenize_passes_bounded_connect_timeout() -> None:
+    # fail-before: the /tokenize call passed the float 30.
+    suite = get_suite("coding-mini")
+    client = _RecordingClient()
+    bodies = {task.task_id: _resp("x " * 5) for task in suite.tasks}
+    probe(
+        "http://mock",
+        suite,
+        client=client,
+        mock_responses=bodies,
+        policy_path=str("/tmp/thinkcap-unused-policy.json"),
+        budget_store_path=str("/tmp/thinkcap-unused-budgets.json"),
+        write_artifacts=False,
+    )
+    posts = [timeout for kind, timeout in client.calls if kind == "post"]
+    assert posts, "probe should have called /tokenize"
+    assert all(t.connect == 10.0 and t.read == 30.0 for t in posts)
